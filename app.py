@@ -71,11 +71,11 @@ def search_barcode(barcode):
     df = pd.read_csv(CSV_FILENAME)
     # codigo para buscar en pandas (usando shipment_actual.csv)
     # buscar FNSKU y Quantity
-    FNSKU = df[df['UPC'] == UPC]['FNSKU'].values[0]
-    Quantity = df[df['UPC'] == UPC]['Quantity'].values[0]
+    FNSKU = df[df['UPC/EAN (GTIN)'] == UPC]['FNSKU'].values[0]
+    Quantity = df[df['UPC/EAN (GTIN)'] == UPC]['Quantity'].values[0]
     # buscar Amazon Labels
     #la amazon label se imprime solo si toca el boton de opcion de imprimir amazon labels en la interfaz
-    amazon_labels = df[df['UPC'] == UPC]['Amazon Labels'].values[0]
+    amazon_labels = df[df['UPC/EAN (GTIN)'] == UPC]['Amazon Labels'].values[0]
     # imprimir FNSKU y Quantity para chekear que se haya encontrado
     print(f"FNSKU: {FNSKU}, Quantity: {Quantity}")
     print("---------------------------------------------------------")
