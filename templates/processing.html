@@ -1,0 +1,90 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        
+        <div class="d-flex justify-content-between mb-3">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">⬅ Back to Home</a>
+            <button class="btn btn-warning text-dark fw-bold" onclick="alert('Lógica de la acción a futuro en construcción')">🚀 Future Action</button>
+        </div>
+
+        <div class="card shadow-sm border-primary">
+            <div class="card-body text-center p-4">
+                <h2 class="h4 mb-4 text-primary">Scanner Mode Active</h2>
+                
+                <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-none mb-3" 
+                       style="border: 2px solid #0d6efd; font-size: 1.5rem;" 
+                       autofocus autocomplete="off" placeholder="Shoot the barcode scanner here...">
+                
+                <div id="result-log" class="mt-4 text-start">
+                    <p class="text-muted text-center">Waiting for scan...</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const inputScanner = document.getElementById('scanner-input');
+    const resultLog = document.getElementById('result-log');
+
+    // Mantiene el foco en el input del escáner en todo momento
+    document.addEventListener('click', (e) => {
+        // Evitar robar el foco si el usuario hace clic explícitamente en los botones
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
+            inputScanner.focus();
+        }
+    });
+
+    // Escuchar el Enter que manda la pistola láser
+    inputScanner.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            const barcode = inputScanner.value.trim();
+            inputScanner.value = ''; // Limpiamos para el próximo escaneo
+            
+            if (barcode) {
+                enviarCodigoAlBackend(barcode);
+            }
+        }
+    });
+
+    async function enviarCodigoAlBackend(barcode) {
+        try {
+            resultLog.innerHTML = `
+                <div class="alert alert-info py-2" role="alert">
+                    Processing <strong>${barcode}</strong>...
+                </div>`;
+            
+            const response = await fetch('/scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ barcode: barcode })
+            });
+            
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+                resultLog.innerHTML = `
+                    <div class="alert alert-success py-2" role="alert">
+                        ✅ ${data.message}
+                    </div>`;
+            } else {
+                resultLog.innerHTML = `
+                    <div class="alert alert-danger py-2" role="alert">
+                        ❌ Error: ${data.message || 'Not found'}
+                    </div>`;
+            }
+        } catch (error) {
+            resultLog.innerHTML = `
+                <div class="alert alert-danger py-2" role="alert">
+                    ❌ Connection error with the server.
+                </div>`;
+        }
+    }
+</script>
+{% endblock %}
