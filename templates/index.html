@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Shipment</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { background: #f6f8fb; }
+        .hero { padding: 28px 0; }
+        .logo { height: 54px; }
+        .drop-area {
+            border: 2px dashed #e1e7ef;
+            border-radius: 8px;
+            padding: 18px;
+            background: #fff;
+            transition: border-color .15s ease, box-shadow .15s ease;
+        }
+        .drop-area.dragover { border-color: #6ea8fe; box-shadow: 0 4px 20px rgba(110,168,254,0.12); }
+        .file-name { font-weight: 600; }
+        .small-muted { color: #6b7280; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header class="d-flex align-items-center hero">
+        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo me-3">
+        <div>
+            <h1 class="h4 mb-0">Shipping Tool</h1>
+            <small class="text-muted">Upload the shipment (CSV) and the two label PDFs</small>
+        </div>
+    </header>
+
+    <main>
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <form id="uploadForm" action="/" method="POST" enctype="multipart/form-data" novalidate>
+                            <div class="mb-4">
+                                <label class="form-label">Shipment (CSV)</label>
+                                <div id="shipmentDrop" class="drop-area">
+                                    <input id="shipment" name="shipment" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="form-control form-control-sm">
+                                    <div class="mt-2 small-muted">Accepted: <strong>.csv, .xlsx</strong></div>
+                                    <div class="mt-2" id="shipmentName"></div>
+                                </div>
+                            </div>
+
+                            <div class="mb-4 row">
+                                <div class="col-md-6">
+                                    <label class="form-label">Box label (PDF)</label>
+                                    <input id="box_label_pdf" name="box_label_pdf" type="file" accept="application/pdf,.pdf" required class="form-control">
+                                    <div class="mt-2 small-muted">Accepted: <strong>.pdf</strong></div>
+                                    <div class="mt-2" id="boxLabelName"></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Shoe label (PDF)</label>
+                                    <input id="shoe_label_pdf" name="shoe_label_pdf" type="file" accept="application/pdf,.pdf" required class="form-control">
+                                    <div class="mt-2 small-muted">Accepted: <strong>.pdf</strong></div>
+                                    <div class="mt-2" id="shoeLabelName"></div>
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="text-muted">Max size: 10 MB per file</div>
+                                <div>
+                                    <button id="submitBtn" class="btn btn-primary">Upload &amp; Process</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+</div>
+
+<script>
+    // Helper to show file names and validate extensions
+    function showFileName(inputEl, outElId, allowedExtRegex) {
+        const out = document.getElementById(outElId);
+        const file = inputEl.files[0];
+        if (!file) { out.textContent = ''; return true; }
+        const name = file.name;
+        out.innerHTML = '<span class="file-name">' + name + '</span>';
+        if (!allowedExtRegex.test(name.toLowerCase())) {
+            out.innerHTML += ' <span class="text-danger">(invalid type)</span>';
+            return false;
+        }
+        return true;
+    }
+
+    const shipmentInput = document.getElementById('shipment');
+    const boxInput = document.getElementById('box_label_pdf');
+    const shoeInput = document.getElementById('shoe_label_pdf');
+
+    shipmentInput.addEventListener('change', function(){ showFileName(this, 'shipmentName', /\.(csv|xlsx)$/i); });
+    boxInput.addEventListener('change', function(){ showFileName(this, 'boxLabelName', /\.pdf$/); });
+    shoeInput.addEventListener('change', function(){ showFileName(this, 'shoeLabelName', /\.pdf$/); });
+
+    // Drag and drop effect for shipment area
+    const drop = document.getElementById('shipmentDrop');
+    ['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('dragover'); }));
+    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('dragover'); }));
+    drop.addEventListener('drop', function(ev){
+        const dt = ev.dataTransfer;
+        if (dt && dt.files && dt.files.length) {
+            shipmentInput.files = dt.files;
+            shipmentInput.dispatchEvent(new Event('change'));
+        }
+    });
+
+    // Form submit validation
+    document.getElementById('uploadForm').addEventListener('submit', function(e){
+        const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv|xlsx)$/i);
+        const ok2 = showFileName(boxInput, 'boxLabelName', /\.pdf$/);
+        const ok3 = showFileName(shoeInput, 'shoeLabelName', /\.pdf$/);
+        if (!ok1 || !ok2 || !ok3) {
+            e.preventDefault();
+            alert('Please provide valid files: shipment (.csv) and two PDFs.');
+            return false;
+        }
+        return true;
+    });
+</script>
+
+</body>
+</html>

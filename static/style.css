@@ -1,0 +1,148 @@
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    text-align: center;
+}
+
+.header {
+    background-color: #3b5998;
+    color: white;
+    padding: 20px;
+}
+
+.logo {
+    width: 100px;
+    height: auto;
+}
+
+.container {
+    margin: 50px auto;
+    width: 80%;
+}
+
+form {
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    max-width: 1000px; /* Set a max-width for the form */
+    margin: 0 auto; /* Center the form */
+}
+
+input, button, select {
+    width: 100%;
+    max-width: 950px; /* Set a max-width for inputs, buttons, and select */
+    padding: 15px;
+    margin: 10px 0;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+button {
+    background-color: #3b5998;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #2e4485;
+}
+
+/* Add this new styling for label and select */
+.inline-label {
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Ensure spacing between label and select */
+    max-width: 950px; /* Set max-width to match input fields */
+    margin: 10px auto;
+}
+
+.inline-label label {
+    margin-right: 10px;
+    flex-shrink: 0;
+    text-align: right; /* Align the label to the right */
+    min-width: 100px; /* Optional: Set a min-width for the label */
+}
+
+.inline-label select {
+    flex-grow: 1;
+}
+
+.checkbox-group {
+    display: flex;
+    justify-content: center; /* Center the checkboxes */
+    align-items: center;
+    max-width: 950px;
+    margin: 10px auto;
+}
+
+.checkbox-group label {
+    display: flex;
+    align-items: center;
+    margin-right: 20px; /* Add some space between the two checkboxes */
+    font-size: 16px;
+    white-space: nowrap;
+}
+
+.checkbox-group input[type="checkbox"] {
+    margin-right: 10px;
+}
+
+/* Reset styles for n8n chat widget to prevent page styles from leaking in */
+.n8n-chat-widget {
+    text-align: left;
+}
+
+.n8n-chat-widget .chat-container {
+    text-align: left;
+}
+
+.n8n-chat-widget .chat-input textarea {
+    width: auto;
+    flex: 1;
+    max-width: none;
+    padding: 12px;
+    margin: 0;
+    font-size: 14px;
+}
+
+.n8n-chat-widget .chat-input button {
+    width: auto;
+    max-width: none;
+    padding: 0 20px;
+    margin: 0;
+}
+
+.n8n-chat-widget .new-chat-btn {
+    width: 100%;
+    max-width: none;
+}
+
+.n8n-chat-widget .close-button {
+    width: auto;
+    max-width: none;
+    padding: 4px;
+    margin: 0;
+}
+
+.btn-bulk {
+    display: inline-block;
+    padding: 10px 20px;
+    background-color: #714B67; /* El morado característico de Odoo */
+    color: white;
+    text-decoration: none;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: background-color 0.2s ease;
+}
+
+.btn-bulk:hover {
+    background-color: #5a3c52; /* Un tono más oscuro al pasar el mouse */
+    color: white;
+}
