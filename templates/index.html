@@ -42,8 +42,8 @@
                             <div class="mb-4">
                                 <label class="form-label">Shipment (CSV)</label>
                                 <div id="shipmentDrop" class="drop-area">
-                                    <input id="shipment" name="shipment" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="form-control form-control-sm">
-                                    <div class="mt-2 small-muted">Accepted: <strong>.csv, .xlsx</strong></div>
+                                    <input id="shipment" name="shipment" type="file" accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="form-control form-control-sm">
+                                    <div class="mt-2 small-muted">Accepted: <strong>.csv</strong></div>
                                     <div class="mt-2" id="shipmentName"></div>
                                 </div>
                             </div>
@@ -98,7 +98,7 @@
     const boxInput = document.getElementById('box_label_pdf');
     const shoeInput = document.getElementById('shoe_label_pdf');
 
-    shipmentInput.addEventListener('change', function(){ showFileName(this, 'shipmentName', /\.(csv|xlsx)$/i); });
+    shipmentInput.addEventListener('change', function(){ showFileName(this, 'shipmentName', /\.(csv)$/i); });
     boxInput.addEventListener('change', function(){ showFileName(this, 'boxLabelName', /\.pdf$/); });
     shoeInput.addEventListener('change', function(){ showFileName(this, 'shoeLabelName', /\.pdf$/); });
 
@@ -116,7 +116,7 @@
 
     // Form submit validation
     document.getElementById('uploadForm').addEventListener('submit', function(e){
-        const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv|xlsx)$/i);
+        const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv)$/i);
         const ok2 = showFileName(boxInput, 'boxLabelName', /\.pdf$/);
         const ok3 = showFileName(shoeInput, 'shoeLabelName', /\.pdf$/);
         if (!ok1 || !ok2 || !ok3) {
