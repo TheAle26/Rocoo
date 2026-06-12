@@ -18,11 +18,11 @@ if not os.path.exists(OUTPUT_FOLDER):
         pass
 
 # Nombres fijos para que se sobreescriban siempre y no ocupen espacio extra
-CSV_FILENAME = 'shipment_actual.csv'
-BOX_PDF_FILENAME = 'box_labels_actual.pdf'
-SHOE_PDF_FILENAME = 'shoe_labels_actual.pdf'
+CSV_FILENAME = 'actual_shipment.csv'
+BOX_PDF_FILENAME = 'box_labels_actual_shipment.pdf'
+SHOE_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
 
-last_row = 0 # Variable global para llevar el conteo de la fila actual en shipment_actual.csv
+last_row = 0 # global variable to keep track of the current row in the csv file, so we can print the big box label
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -34,6 +34,7 @@ def index():
 
         if shipment and box_label_pdf and shoe_label_pdf:
             # Al guardar con el mismo nombre, se pisa el archivo viejo automáticamente
+            
             shipment.save(os.path.join(OUTPUT_FOLDER, CSV_FILENAME))
             box_label_pdf.save(os.path.join(OUTPUT_FOLDER, BOX_PDF_FILENAME))
             shoe_label_pdf.save(os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME))
@@ -41,9 +42,13 @@ def index():
             
             global df_memory
             path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
-            df_memory = pd.read_csv(path_csv, dtype=str)
+        
+            if shipment.filename.endswith('.xlsx'):
+                df_memory = pd.read_excel(path_csv, dtype=str)
+            else:
+                df_memory = pd.read_csv(path_csv, dtype=str)
             
-            # Redirigimos a la página de procesamiento
+            # now we go to the procesing page
             return redirect(url_for('processing_page'))
 
     return render_template('index.html')
@@ -55,6 +60,7 @@ def processing_page():
 
 @app.route('/scan', methods=['POST'])
 def scan_barcode():
+    
     data = request.get_json()
     barcode = data.get('barcode', '').strip()
 
@@ -66,7 +72,7 @@ def scan_barcode():
     if df_memory is None:
         return jsonify({"status": "error", "message": "CVS fyle is not in memory"}), 400
     
-    # Le pasamos la ruta completa a la función, en lugar de solo el nombre
+    # now we search the barcode in the csv file
     resultado = search_barcode(barcode, df_memory)
     
     
@@ -79,26 +85,43 @@ def scan_barcode():
     
     global last_row
     
-    last_row = resultado["row"].index[0] # Obtenemos el índice de la fila encontrada
+    last_row = resultado["row"].index[0] # get the index of the row found
     
-    # Desempaquetamos los valores que vinieron del otro archivo
+    # unpack the values that came from the other file
     FNSKU = resultado["FNSKU"]
     quantity = resultado["Quantity"]
     amazon_labels = resultado["Amazon Labels"]
     
+    #for debugging
     print(f"FNSKU: {FNSKU}, Quantity: {quantity}")
     
-    # Mandamos a imprimir
-    print_label(FNSKU, quantity) 
-    message = f"There are {quantity} labels to print." if quantity > 1 else "There is 1 label to print."
-    return {
-        "status": "success",
-        "FNSKU": str(FNSKU), # Forzamos a que sea texto
-        "Quantity": int(quantity), # Forzamos a entero de Python
-        "Amazon Labels": str(amazon_labels),
-        "Row": int(last_row), # Forzamos a entero de Python
-        "message": message
-    }
+    # now we print the labels
+    path_box_pdf = os.path.join(OUTPUT_FOLDER, BOX_PDF_FILENAME)
+    path_shoe_pdf = os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME)
+    
+    try:
+        # We attempt to print the labels
+        print_label(FNSKU, quantity, path_shoe_pdf) 
+        
+        # If no exception is raised, it means the socket successfully sent the ZPL
+        message = f"Found! Sent {quantity} label(s) to printer."
+        
+        return {
+            "status": "success",
+            "FNSKU": str(FNSKU), 
+            "Quantity": int(quantity), 
+            "Amazon Labels": str(amazon_labels),
+            "Row": int(last_row), 
+            "message": message
+        }
+        
+    except Exception as e:
+        # If the printer is disconnected or unreachable, it fails here
+        print(f"Printer Error: {e}")
+        return {
+            "status": "error",
+            "message": f"Item found, but printer is disconnected or unreachable."
+        }, 500
     
     
 

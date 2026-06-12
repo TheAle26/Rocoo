@@ -56,8 +56,8 @@
     async function enviarCodigoAlBackend(barcode) {
         try {
             resultLog.innerHTML = `
-                <div class="alert alert-info py-2" role="alert">
-                    Processing <strong>${barcode}</strong>...
+                <div class="alert alert-info py-3 fs-5" role="alert">
+                    ⏳ Searching barcode...
                 </div>`;
             
             const response = await fetch('/scan', {
@@ -70,19 +70,20 @@
             
             if (response.ok && data.status === 'success') {
                 resultLog.innerHTML = `
-                    <div class="alert alert-success py-2" role="alert">
-                        ✅ ${data.message}
+                    <div class="alert alert-success py-3 fs-5" role="alert">
+                        ✅ <strong>${data.message}</strong><br>
+                        🖨️ <strong>Job sent to printer.</strong>
                     </div>`;
             } else {
                 resultLog.innerHTML = `
-                    <div class="alert alert-danger py-2" role="alert">
-                        ❌ Error: ${data.message || 'Not found'}
+                    <div class="alert alert-danger py-3 fs-5" role="alert">
+                        ❌ <strong>Error:</strong> ${data.message || 'Barcode not found'}
                     </div>`;
             }
         } catch (error) {
             resultLog.innerHTML = `
-                <div class="alert alert-danger py-2" role="alert">
-                    ❌ Connection error with the server.
+                <div class="alert alert-danger py-3 fs-5" role="alert">
+                    ❌ Server connection error. Please check if the server is running.
                 </div>`;
         }
     }
