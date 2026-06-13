@@ -1,191 +1,233 @@
-from flask import Flask, request, render_template, jsonify, redirect, url_for
+from flask import Flask, request, render_template, jsonify, redirect, url_for, send_file
 import os
 import concurrent.futures
 import pandas as pd
-from big_box import build_upc_to_page_dictionary
-from shoe_box import print_label , map_all_labels_in_pdf
-from search_cvs import search_barcode
+
+# Import your external functions
+from shoe_box import print_label, map_all_labels_in_pdf
+# (Make sure to put the two new dictionary builders we just wrote into big_box.py or search_cvs.py and import them here)
+from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict 
 
 app = Flask(__name__, static_folder='static')
-df_memory = None  
-label_map = None
-bix_box_map = None
 
-# Define the path to the output folder
+# Global Variables for our Memory Hash Maps
+df_memory = None  
+label_map = None          # Shoe box map {FNSKU: Product Name}
+bix_box_map = None        # Big box map {Amazon Label: Page Number}
+master_upc_map = None     # Master CSV map {UPC: [List of Master Boxes]}
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_FOLDER = os.path.join(BASE_DIR, 'output')
 
 if not os.path.exists(OUTPUT_FOLDER):
-    try:
-        os.makedirs(OUTPUT_FOLDER)
-    except FileExistsError:
-        pass
+    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-# fix names. the files are overwritten every time, so we can use the same name and just replace the old one. This way we don't have to worry about cleaning up old files.
 CSV_FILENAME = 'actual_shipment.csv'
-BOX_PDF_FILENAME = 'box_labels_actual_shipment.pdf'
-SHOE_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
+BIG_BOX_PDF_FILENAME = 'box_labels_actual_shipment.pdf'
+SMALL_BOX_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
 
-last_row = 0 # global variable to keep track of the current row in the csv file, so we can print the big box label
+
+def process_pdfs_concurrently(shoe_path, box_path, memory_df):
+    """
+    Runs all 3 parsers at the exact same time using 3 background threads.
+    """
+    global label_map, bix_box_map, master_upc_map
+    print("🚀 Starting parallel processing (Shoe PDF, Box PDF, and CSV Map)...")
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        # 1. Dispatch all three tasks
+        future_shoes = executor.submit(map_all_labels_in_pdf, shoe_path)
+        future_boxes = executor.submit(build_amazon_label_to_page_dict, box_path, memory_df)
+        future_master = executor.submit(build_master_upc_dict, memory_df)
+        
+        # 2. Wait and grab results
+        label_map = future_shoes.result()
+        bix_box_map = future_boxes.result()
+        master_upc_map = future_master.result()
+        
+    print("✅ All data successfully processed and loaded into memory!")
+
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     if request.method == 'POST':
-        # Corregido: usamos request.files para todos los archivos
-        shipment = request.files.get('shipment')
-        box_label_pdf = request.files.get('box_label_pdf') 
-        shoe_label_pdf = request.files.get('shoe_label_pdf') 
+        mode = request.form.get('mode')
+        global df_memory
+        path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
 
-        if shipment and box_label_pdf and shoe_label_pdf:
-            # Al guardar con el mismo nombre, se pisa el archivo viejo automáticamente
-            
-            shipment.save(os.path.join(OUTPUT_FOLDER, CSV_FILENAME))
-            box_label_pdf.save(os.path.join(OUTPUT_FOLDER, BOX_PDF_FILENAME))
-            shoe_label_pdf.save(os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME))
-            
-            
-            global df_memory
-            path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
-        
-            if shipment.filename.endswith('.xlsx'):
-                df_memory = pd.read_excel(path_csv, dtype=str)
+        if mode == 'scan':
+            if not all(os.path.exists(os.path.join(OUTPUT_FOLDER, f)) for f in [CSV_FILENAME, BIG_BOX_PDF_FILENAME, SMALL_BOX_PDF_FILENAME]):
+                return render_template('index.html', error="No previous session found.")
+            df_memory = pd.read_csv(path_csv, dtype=str)
+
+        else:   
+            shipment = request.files.get('shipment')
+            big_box_label_pdf = request.files.get('big_box_label_pdf') 
+            small_box_label_pdf = request.files.get('small_box_label_pdf') 
+
+            if shipment and big_box_label_pdf and small_box_label_pdf:
+                try:
+                    shipment.save(path_csv)
+                    big_box_label_pdf.save(os.path.join(OUTPUT_FOLDER, BIG_BOX_PDF_FILENAME))
+                    small_box_label_pdf.save(os.path.join(OUTPUT_FOLDER, SMALL_BOX_PDF_FILENAME))
+
+                    if shipment.filename.endswith('.xlsx'):
+                        df_memory = pd.read_excel(path_csv, dtype=str)
+                    else:
+                        df_memory = pd.read_csv(path_csv, dtype=str)
+                except Exception as e:
+                    return render_template('index.html', error=f"Error processing files: {str(e)}")
             else:
-                df_memory = pd.read_csv(path_csv, dtype=str)
+                return render_template('index.html', error="Please provide all valid files.")
+
+        if 'DONE' not in df_memory.columns:
+            df_memory['DONE'] = 'False'   
+                 
+        df_memory.to_csv(path_csv, index=False)  
+              
+        # Launch the background builders
+        process_pdfs_concurrently(
+            os.path.join(OUTPUT_FOLDER, SMALL_BOX_PDF_FILENAME), 
+            os.path.join(OUTPUT_FOLDER, BIG_BOX_PDF_FILENAME), 
+            df_memory
+        )
                 
-            
-            process_pdfs_concurrently(os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME), os.path.join(OUTPUT_FOLDER, BOX_PDF_FILENAME), df_memory)
-            
-            #old code
-            # now we map all the labels in the shoe pdf to a dictionary, so we can access them by FNSKU when we need to print
-            # global label_map
-            # label_map = map_all_labels_in_pdf(os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME))
-            
-            # global bix_box_map
-            # #the dictonary structure is {UPC: [Amazon Label, Page Number]} 
-            # bix_box_map = build_upc_to_page_dictionary(os.path.join(OUTPUT_FOLDER, BOX_PDF_FILENAME),df_memory)
-            
-            # now we go to the procesing page
-            return redirect(url_for('processing_page'))
+        return redirect(url_for('processing_page'))
 
     return render_template('index.html')
 
+
 @app.route('/processing')
 def processing_page():
-    # just for rendering
     return render_template('processing.html')
 
+
+# --- NEW: SCAN ROUTE (Just returns the list of boxes) ---
 @app.route('/scan', methods=['POST'])
 def scan_barcode():
-    
     data = request.get_json()
     barcode = data.get('barcode', '').strip()
 
     if not barcode:
         return jsonify({"status": "error", "message": "Empty code"}), 400
 
+    global master_upc_map
+    if master_upc_map is None:
+        return jsonify({"status": "error", "message": "CSV data is not in memory"}), 400
+    
+    boxes_list = master_upc_map.get(barcode)
+    
+    if not boxes_list:
+        return jsonify({"status": "error", "message": f"UPC {barcode} not found."}), 404
+    
+    # Return the list to the frontend to display the Master Boxes
+    return jsonify({
+        "status": "success",
+        "UPC": barcode,
+        "boxes": boxes_list
+    })
 
-    global df_memory
-    if df_memory is None:
-        return jsonify({"status": "error", "message": "CVS fyle is not in memory"}), 400
-    
-    # now we search the barcode in the csv file
-    resultado = search_barcode(barcode, df_memory)
-    
-    
-    if resultado["status"] == "error":
 
-        return jsonify({
-            "status": "error",
-            "message": resultado["message"]
-        }), 404
+# --- ROUTE 1: PRINT SHOES ONLY ---
+@app.route('/print_shoes', methods=['POST'])
+def print_shoes():
+    data = request.get_json()
+    row_index = data.get('row_index')
+
+    if row_index is None:
+        return jsonify({"status": "error", "message": "Missing row_index."}), 400
+        
+    row_index = int(row_index)
+    global df_memory, label_map
     
-    global last_row
+    fnsku = df_memory.at[row_index, 'FNSKU']
+    quantity = int(float(df_memory.at[row_index, 'Quantity']))
+    product_name = label_map.get(fnsku, "Unknown Product")
     
-    last_row = resultado["row"].index[0] # get the index of the row found
-    
-    # unpack the values that came from the other file
-    FNSKU = resultado["FNSKU"]
-    quantity = resultado["Quantity"]
-    amazon_labels = resultado["Amazon Labels"]
-    
-    #for debugging
-    print(f"FNSKU: {FNSKU}, Quantity: {quantity}")
-    
-    # now we print the labels
-    
-    path_shoe_pdf = os.path.join(OUTPUT_FOLDER, SHOE_PDF_FILENAME)
-    
-    
-    product_name = label_map.get(FNSKU, "Unknown Product")
-    # get the product name from the label map, if it doesn't exist we put "Unknown Product"
     try:
-        # We attempt to print the labels
-        print_label(FNSKU, quantity, product_name) 
-        
-        # If no exception is raised, it means the socket successfully sent the ZPL
-        message = f"Found! Sent {quantity} label(s) to printer."
-        
-        return {
-            "status": "success",
-            "FNSKU": str(FNSKU), 
-            "Quantity": int(quantity), 
-            "Amazon Labels": str(amazon_labels),
-            "Row": int(last_row), 
-            "message": message
-        }
-        
+        # Prints the exact quantity specified in the CSV
+        print_label(fnsku, quantity, product_name)
+        return jsonify({
+            "status": "success", 
+            "message": f"Sent {quantity} shoe labels to the printer!"
+        })
     except Exception as e:
-        # If the printer is disconnected or unreachable, it fails here
-        print(f"Printer Error: {e}")
-        return {
-            "status": "error",
-            "message": f"Item found, but printer is disconnected or unreachable."
-        }, 500
+        return jsonify({"status": "error", "message": f"Shoe printer error: {str(e)}"}), 500
+
+
+# --- ROUTE 2: PRINT BIG BOX ONLY ---
+@app.route('/print_big_box', methods=['POST'])
+def print_big_box():
+    data = request.get_json()
+    row_index = data.get('row_index')
+
+    if row_index is None:
+        return jsonify({"status": "error", "message": "Missing row_index."}), 400
+        
+    row_index = int(row_index)
+    global df_memory, bix_box_map
     
+    amazon_label = df_memory.at[row_index, 'Amazon Labels']
+    big_box_page_num = bix_box_map.get(amazon_label)
     
+    if big_box_page_num is None:
+        return jsonify({"status": "error", "message": f"Page for label {amazon_label} not found."}), 404
+
+    try:
+        # Insert your actual big box print logic here!
+        # print_amazon_labels(amazon_label, big_box_page_num)
+        
+        # We return the human-readable page number (+1) just in case the UI wants to show it
+        return jsonify({
+            "status": "success",
+            "message": f"Sent Big Box label (Page {big_box_page_num + 1}) to printer!",
+            "page": big_box_page_num + 1
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Big Box printer error: {str(e)}"}), 500
 
 
+# --- ROUTE 3: MARK DONE ONLY ---
+@app.route('/mark_done', methods=['POST'])
+def mark_done():
+    data = request.get_json()
+    row_index = data.get('row_index')
+    upc = data.get('upc')
 
-def print_amazon_labels(amazon_label):
-    # codigo para imprimir amazon labels
-    # ---------------------------------------------------------
-    return 20
-
-
-label_map = {}
-bix_box_map = {}
-
-def process_pdfs_concurrently(output_folder, shoe_pdf, box_pdf, memory_df):
+    if row_index is None or upc is None:
+        return jsonify({"status": "error", "message": "Missing data."}), 400
+        
+    row_index = int(row_index)
+    global df_memory, master_upc_map
+    
+    # 1. Update CSV and save to disk
+    df_memory.at[row_index, 'DONE'] = 'True'
+    path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
+    df_memory.to_csv(path_csv, index=False)
+    
+    # 2. Update memory dict so UI stays in sync
+    for box in master_upc_map[upc]:
+        if box['Row_Index'] == row_index:
+            box['DONE'] = 'True'
+            break
+            
+    return jsonify({
+        "status": "success",
+        "message": f"Box marked DONE in CSV."
+    })
+    
+@app.route('/download_csv')
+def download_csv():
     """
-    Runs both PDF parsers at the exact same time using 2 background threads.
+    Allows the user to download the updated CSV with the 'DONE' statuses.
     """
-    global label_map
-    global bix_box_map
+    path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
     
-    shoe_path = os.path.join(output_folder, shoe_pdf)
-    box_path = os.path.join(output_folder, box_pdf)
-    
-    print("🚀 Starting parallel PDF processing...")
-    
-    # Create a pool with exactly 2 workers (threads)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        
-        # 1. Dispatch both tasks immediately
-        # executor.submit(function_name, arg1, arg2...)
-        future_shoes = executor.submit(map_all_labels_in_pdf, shoe_path)
-        future_boxes = executor.submit(build_upc_to_page_dictionary, box_path, memory_df)
-        
-        # 2. Wait for them to finish and grab their return values.
-        # .result() will block the main thread until the specific background thread is done.
-        label_map = future_shoes.result()
-        bix_box_map = future_boxes.result()
-        
-    print("✅ Both PDFs successfully processed in the background!")
-
-# --- Where you actually call it in your code ---
-# process_pdfs_concurrently(OUTPUT_FOLDER, SHOE_PDF_FILENAME, BOX_PDF_FILENAME, df_memory)
-
-
+    if os.path.exists(path_csv):
+        # as_attachment=True forces the browser to download instead of trying to display it
+        return send_file(path_csv, as_attachment=True, download_name="updated_shipment.csv")
+    else:
+        return "CSV file not found. Please upload a shipment first.", 404
 
 if __name__ == '__main__':
     app.run(debug=True)

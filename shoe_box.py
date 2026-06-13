@@ -12,6 +12,7 @@ def print_label(FNSKU, quantity, product_name):
     
     if product_name:
         save_label_as_picture(FNSKU, product_name, output_filename)
+        print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
         zebra_printer(FNSKU, product_name,quantity)
 
     else:

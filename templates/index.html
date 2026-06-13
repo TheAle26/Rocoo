@@ -4,91 +4,143 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shipping Tool</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        body { background: #f6f8fb; }
-        .hero { padding: 28px 0; }
-        .logo { height: 54px; }
-        .drop-area {
-            border: 2px dashed #e1e7ef;
-            border-radius: 8px;
-            padding: 18px;
-            background: #fff;
-            transition: border-color .15s ease, box-shadow .15s ease;
-        }
-        .drop-area.dragover { border-color: #6ea8fe; box-shadow: 0 4px 20px rgba(110,168,254,0.12); }
-        .file-name { font-weight: 600; }
-        .small-muted { color: #6b7280; }
-    </style>
+
 </head>
 <body>
-<div class="container">
-    <header class="d-flex align-items-center hero">
+<nav class="navbar-custom">
+    <div class="container d-flex align-items-center">
         <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo me-3" onerror="this.style.display='none'">
         <div>
-            <h1 class="h4 mb-0">Shipping Tool</h1>
-            <small class="text-muted">Upload the shipment (CSV) and the two label PDFs</small>
+            <h1 class="h6 mb-0 fw-bold">Shipping Tool</h1>
+            <span class="text-muted" style="font-size: 0.75rem;">Upload shipment data and processing labels</span>
         </div>
-    </header>
+    </div>
+</nav>
 
+<div class="container">
     <main>
         {% block content %}
         <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card shadow-sm">
-                    <div class="card-body">
+            <div class="col-lg-9 col-xl-8">
+
+                {% if error %}
+                <div class="alert alert-danger alert-dismissible fade show shadow-sm rounded-3 d-flex align-items-center py-2 mb-3" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-3 fs-5"></i>
+                    <div>
+                        <strong>Error!</strong> {{ error }}
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endif %}
+
+                <div class="card main-card">
+                    <div class="card-header-custom d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-primary"></i>New Shipment Process</h6>
+                    </div>
+                    
+                    <div class="card-body p-4">
+
+                        <div class="action-toolbar">
+                            <a href="{{ url_for('download_csv') }}" class="tool-btn">
+                                <i class="bi bi-download"></i> Download CSV
+                            </a>
+
+                            <form action="/" method="POST" class="m-0">
+                                <input type="hidden" name="mode" value="scan">
+                                <button type="submit" class="tool-btn tool-btn-primary">
+                                    <i class="bi bi-play-fill"></i> Continue Work
+                                </button>
+                            </form>
+                        </div>
+
                         <form id="uploadForm" action="/" method="POST" enctype="multipart/form-data" novalidate>
+                            
                             <div class="mb-4">
-                                <label class="form-label">Shipment (CSV)</label>
+                                <label class="form-label">1. Shipment Data</label>
+                                <p class="text-muted small mb-2" style="font-size: 0.8rem;">Upload your master shipment spreadsheet.</p>
+                                
                                 <div id="shipmentDrop" class="drop-area">
-                                    <input id="shipment" name="shipment" type="file" accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="form-control form-control-sm">
-                                    <div class="mt-2 small-muted">Accepted: <strong>.csv</strong></div>
-                                    <div class="mt-2" id="shipmentName"></div>
+                                    <input id="shipment" name="shipment" type="file" accept=".csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required class="file-input-hidden">
+                                    <i class="bi bi-cloud-arrow-up drop-area-icon"></i>
+                                    <h6 class="mt-1 mb-0" style="font-size: 0.9rem;">Drag & Drop your file here</h6>
+                                    <span class="small-muted">or click to browse from your computer</span>
+                                    <div class="mt-1 small-muted">Accepted formats: <strong>.csv, .xlsx</strong></div>
+                                    <div id="shipmentName"></div>
                                 </div>
                             </div>
 
-                            <div class="mb-4 row">
-                                <div class="col-md-6">
-                                    <label class="form-label">Box label (PDF)</label>
-                                    <input id="box_label_pdf" name="box_label_pdf" type="file" accept="application/pdf,.pdf" required class="form-control">
-                                    <div class="mt-2 small-muted">Accepted: <strong>.pdf</strong></div>
-                                    <div class="mt-2" id="boxLabelName"></div>
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Shoe label (PDF)</label>
-                                    <input id="shoe_label_pdf" name="shoe_label_pdf" type="file" accept="application/pdf,.pdf" required class="form-control">
-                                    <div class="mt-2 small-muted">Accepted: <strong>.pdf</strong></div>
-                                    <div class="mt-2" id="shoeLabelName"></div>
+                            <div class="mb-3">
+                                <label class="form-label">2. Shipping Labels</label>
+                                <p class="text-muted small mb-2" style="font-size: 0.8rem;">Upload the corresponding labels for boxes and shoes.</p>
+                                
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div id="boxDrop" class="drop-area py-3 px-2 h-100">
+                                            <input id="box_label_pdf" name="big_box_label_pdf" type="file" accept="application/pdf,.pdf" required class="file-input-hidden">
+                                            <i class="bi bi-file-earmark-pdf drop-area-icon fs-4"></i>
+                                            <h6 class="mt-1 mb-0" style="font-size: 0.9rem;">Big Box Label</h6>
+                                            <span class="small-muted d-block">Click or drag PDF</span>
+                                            <div id="boxLabelName"></div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div id="shoeDrop" class="drop-area py-3 px-2 h-100">
+                                            <input id="shoe_label_pdf" name="small_box_label_pdf" type="file" accept="application/pdf,.pdf" required class="file-input-hidden">
+                                            <i class="bi bi-file-earmark-pdf drop-area-icon fs-4"></i>
+                                            <h6 class="mt-1 mb-0" style="font-size: 0.9rem;">Small Box Label</h6>
+                                            <span class="small-muted d-block">Click or drag PDF</span>
+                                            <div id="shoeLabelName"></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div class="text-muted">Max size: 10 MB per file</div>
-                                <div>
-                                    <button id="submitBtn" class="btn btn-primary">Upload &amp; Process</button>
+                            <hr class="mb-3">
+
+                            <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+                                <div class="text-muted" style="font-size: 0.8rem;">
+                                    <i class="bi bi-info-circle me-1"></i> Max file size: 10 MB per file
                                 </div>
+                                <button id="submitBtn" class="btn btn-primary btn-submit shadow-sm">
+                                    <i class="bi bi-check2-circle me-2"></i>Upload & Process
+                                </button>
                             </div>
                         </form>
+
                     </div>
                 </div>
             </div>
         </div>
         {% endblock %}
-        </main>
+    </main>
 </div>
 
 {% block scripts %}
 <script>
-    // Helper to show file names and validate extensions
+    // Helper to show file names and validate extensions, now with rich UI elements
     function showFileName(inputEl, outElId, allowedExtRegex) {
         const out = document.getElementById(outElId);
         const file = inputEl.files[0];
         if (!file) { out.textContent = ''; return true; }
+        
         const name = file.name;
-        out.innerHTML = '<span class="file-name">' + name + '</span>';
+        let icon = '<i class="bi bi-file-earmark-check"></i>';
+        
+        if (name.toLowerCase().endsWith('.pdf')) {
+            icon = '<i class="bi bi-file-earmark-pdf"></i>';
+        } else if (name.toLowerCase().endsWith('.csv') || name.toLowerCase().endsWith('.xlsx')) {
+            icon = '<i class="bi bi-file-earmark-spreadsheet"></i>';
+        }
+
+        out.innerHTML = '<div class="file-name-badge shadow-sm">' + icon + ' ' + name + '</div>';
+        
         if (!allowedExtRegex.test(name.toLowerCase())) {
-            out.innerHTML += ' <span class="text-danger">(invalid type)</span>';
+            out.innerHTML += ' <div class="text-danger small mt-1 fw-bold"><i class="bi bi-x-circle"></i> Invalid file type</div>';
             return false;
         }
         return true;
@@ -98,32 +150,60 @@
     const boxInput = document.getElementById('box_label_pdf');
     const shoeInput = document.getElementById('shoe_label_pdf');
 
-    shipmentInput.addEventListener('change', function(){ showFileName(this, 'shipmentName', /\.(csv)$/i); });
+    // 1st Change: Update validation on file change
+    shipmentInput.addEventListener('change', function(){ showFileName(this, 'shipmentName', /\.(csv|xlsx)$/i); });
     boxInput.addEventListener('change', function(){ showFileName(this, 'boxLabelName', /\.pdf$/); });
     shoeInput.addEventListener('change', function(){ showFileName(this, 'shoeLabelName', /\.pdf$/); });
 
-    // Drag and drop effect for shipment area
-    const drop = document.getElementById('shipmentDrop');
-    ['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('dragover'); }));
-    ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('dragover'); }));
-    drop.addEventListener('drop', function(ev){
-        const dt = ev.dataTransfer;
-        if (dt && dt.files && dt.files.length) {
-            shipmentInput.files = dt.files;
-            shipmentInput.dispatchEvent(new Event('change'));
-        }
-    });
+    // Reusable Drag and Drop Setup
+    const setupDragAndDrop = (dropAreaId, inputId) => {
+        const drop = document.getElementById(dropAreaId);
+        const input = document.getElementById(inputId);
+        if(!drop || !input) return;
+
+        ['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => { 
+            ev.preventDefault(); 
+            drop.classList.add('dragover'); 
+        }));
+        
+        ['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { 
+            ev.preventDefault(); 
+            drop.classList.remove('dragover'); 
+        }));
+        
+        drop.addEventListener('drop', function(ev){
+            const dt = ev.dataTransfer;
+            if (dt && dt.files && dt.files.length) {
+                input.files = dt.files;
+                input.dispatchEvent(new Event('change'));
+            }
+        });
+    };
+
+    // Apply drag and drop effects to all three upload areas
+    setupDragAndDrop('shipmentDrop', 'shipment');
+    setupDragAndDrop('boxDrop', 'box_label_pdf');
+    setupDragAndDrop('shoeDrop', 'shoe_label_pdf');
 
     // Form submit validation
     document.getElementById('uploadForm').addEventListener('submit', function(e){
-        const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv)$/i);
+        // 2nd Change: Update validation on form submit
+        const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv|xlsx)$/i);
         const ok2 = showFileName(boxInput, 'boxLabelName', /\.pdf$/);
         const ok3 = showFileName(shoeInput, 'shoeLabelName', /\.pdf$/);
+        
         if (!ok1 || !ok2 || !ok3) {
             e.preventDefault();
-            alert('Please provide valid files: shipment (.csv) and two PDFs.');
+            // 3rd Change: Alert message for errors
+            alert('Please provide valid files: shipment (.csv or .xlsx) and two PDFs.');
             return false;
         }
+        
+        // Minor UX addition: loading state on the button
+        const btn = document.getElementById('submitBtn');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+        btn.classList.add('disabled');
+        
         return true;
     });
 </script>

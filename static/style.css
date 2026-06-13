@@ -1,148 +1,164 @@
-body {
-    font-family: 'Arial', sans-serif;
-    background-color: #f4f4f9;
-    color: #333;
-    margin: 0;
-    padding: 0;
-    text-align: center;
-}
+:root {
+            --primary-color: #4f46e5;
+            --primary-hover: #4338ca;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --border-color: #e5e7eb;
+        }
 
-.header {
-    background-color: #3b5998;
-    color: white;
-    padding: 20px;
-}
+        body {
+            background-color: var(--bg-color);
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            color: var(--text-main);
+            padding-bottom: 1rem;
+        }
 
-.logo {
-    width: 100px;
-    height: auto;
-}
+        /* Top Navigation/Header */
+        .navbar-custom {
+            background: var(--card-bg);
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            padding: 0.75rem 0;
+            margin-bottom: 1.5rem;
+        }
 
-.container {
-    margin: 50px auto;
-    width: 80%;
-}
+        .logo {
+            height: 40px;
+            object-fit: contain;
+        }
 
-form {
-    background-color: white;
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    max-width: 1000px; /* Set a max-width for the form */
-    margin: 0 auto; /* Center the form */
-}
+        /* Main Content Card */
+        .main-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+            background: var(--card-bg);
+            overflow: hidden;
+        }
 
-input, button, select {
-    width: 100%;
-    max-width: 950px; /* Set a max-width for inputs, buttons, and select */
-    padding: 15px;
-    margin: 10px 0;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    font-size: 16px;
-    box-sizing: border-box;
-}
+        .card-header-custom {
+            background: #f9fafb;
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+        }
 
-button {
-    background-color: #3b5998;
-    color: white;
-    border: none;
-    cursor: pointer;
-}
+        /* Toolbar Actions */
+        .action-toolbar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.25rem;
+            padding-bottom: 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+        }
 
-button:hover {
-    background-color: #2e4485;
-}
+        .tool-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-weight: 500;
+            font-size: 0.875rem;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            background: #fff;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            cursor: pointer;
+        }
 
-/* Add this new styling for label and select */
-.inline-label {
-    display: flex;
-    align-items: center;
-    justify-content: center; /* Ensure spacing between label and select */
-    max-width: 950px; /* Set max-width to match input fields */
-    margin: 10px auto;
-}
+        .tool-btn:hover {
+            background: #f9fafb;
+            border-color: #d1d5db;
+            color: var(--primary-color);
+        }
 
-.inline-label label {
-    margin-right: 10px;
-    flex-shrink: 0;
-    text-align: right; /* Align the label to the right */
-    min-width: 100px; /* Optional: Set a min-width for the label */
-}
+        .tool-btn-primary {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: white;
+        }
 
-.inline-label select {
-    flex-grow: 1;
-}
+        .tool-btn-primary:hover {
+            background: var(--primary-hover);
+            border-color: var(--primary-hover);
+            color: white;
+        }
 
-.checkbox-group {
-    display: flex;
-    justify-content: center; /* Center the checkboxes */
-    align-items: center;
-    max-width: 950px;
-    margin: 10px auto;
-}
+        /* Drag & Drop Areas (Made smaller) */
+        .drop-area {
+            border: 2px dashed #cbd5e1;
+            border-radius: 10px;
+            padding: 1.25rem 1rem; /* Reduced padding */
+            background: #f8fafc;
+            text-align: center;
+            transition: all 0.2s ease;
+            position: relative;
+            cursor: pointer;
+        }
 
-.checkbox-group label {
-    display: flex;
-    align-items: center;
-    margin-right: 20px; /* Add some space between the two checkboxes */
-    font-size: 16px;
-    white-space: nowrap;
-}
+        .drop-area:hover, .drop-area.dragover {
+            border-color: var(--primary-color);
+            background: #eef2ff;
+        }
 
-.checkbox-group input[type="checkbox"] {
-    margin-right: 10px;
-}
+        .drop-area-icon {
+            font-size: 1.5rem; /* Reduced icon size */
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+            transition: color 0.2s ease;
+        }
 
-/* Reset styles for n8n chat widget to prevent page styles from leaking in */
-.n8n-chat-widget {
-    text-align: left;
-}
+        .drop-area:hover .drop-area-icon, .drop-area.dragover .drop-area-icon {
+            color: var(--primary-color);
+        }
 
-.n8n-chat-widget .chat-container {
-    text-align: left;
-}
+        /* Hide standard file input and stretch it to cover the drop area for easy clicking */
+        .file-input-hidden {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
 
-.n8n-chat-widget .chat-input textarea {
-    width: auto;
-    flex: 1;
-    max-width: none;
-    padding: 12px;
-    margin: 0;
-    font-size: 14px;
-}
+        /* Dynamic File Name Styling via JS */
+        .file-name-badge {
+            font-weight: 600;
+            color: var(--primary-color);
+            background: #e0e7ff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            display: inline-block;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+        }
 
-.n8n-chat-widget .chat-input button {
-    width: auto;
-    max-width: none;
-    padding: 0 20px;
-    margin: 0;
-}
+        .form-label {
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 0.25rem;
+            font-size: 1rem;
+        }
 
-.n8n-chat-widget .new-chat-btn {
-    width: 100%;
-    max-width: none;
-}
+        .small-muted {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-top: 0.25rem;
+        }
 
-.n8n-chat-widget .close-button {
-    width: auto;
-    max-width: none;
-    padding: 4px;
-    margin: 0;
-}
+        .btn-submit {
+            background: var(--primary-color);
+            border: none;
+            padding: 0.6rem 1.5rem;
+            font-weight: 600;
+            border-radius: 8px;
+            transition: background 0.2s ease;
+        }
 
-.btn-bulk {
-    display: inline-block;
-    padding: 10px 20px;
-    background-color: #714B67; /* El morado característico de Odoo */
-    color: white;
-    text-decoration: none;
-    border-radius: 4px;
-    font-weight: bold;
-    transition: background-color 0.2s ease;
-}
-
-.btn-bulk:hover {
-    background-color: #5a3c52; /* Un tono más oscuro al pasar el mouse */
-    color: white;
-}
+        .btn-submit:hover {
+            background: var(--primary-hover);
+        }

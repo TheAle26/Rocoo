@@ -2,24 +2,52 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-lg-9 col-xl-8">
         
-        <div class="d-flex justify-content-between mb-3">
-            <a href="{{ url_for('index') }}" class="btn btn-secondary">⬅ Back to Home</a>
-            <button class="btn btn-warning text-dark fw-bold" onclick="alert('Lógica de la acción a futuro en construcción')">🚀 Future Action</button>
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <a href="{{ url_for('index') }}" class="btn btn-light border shadow-sm fw-medium rounded-3 px-3 py-2 text-decoration-none">
+                <i class="bi bi-arrow-left me-2"></i>Back to Home
+            </a>
+            
+            <div class="d-flex flex-column flex-sm-row gap-2">
+                <a href="{{ url_for('download_csv') }}" class="btn btn-outline-success shadow-sm rounded-3 px-3 py-2 fw-medium">
+                    <i class="bi bi-file-earmark-spreadsheet me-2"></i>Download (CSV)
+                </a>
+                <button class="btn btn-warning text-dark shadow-sm rounded-3 px-3 py-2 fw-bold" onclick="printBigBox()">
+                    <i class="bi bi-printer-fill me-2"></i>PRINT BIG BOX
+                </button>
+            </div>
         </div>
 
-        <div class="card shadow-sm border-primary">
-            <div class="card-body text-center p-4">
-                <h2 class="h4 mb-4 text-primary">Scanner Mode Active</h2>
+        <div class="card main-card">
+            <div class="card-header-custom d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-upc-scan me-2 text-primary"></i>Scanner Processing</h6>
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-1 rounded-pill">
+                    <span class="spinner-grow spinner-grow-sm me-1" style="width: 0.5rem; height: 0.5rem;" role="status"></span>
+                    Active
+                </span>
+            </div>
+            
+            <div class="card-body text-center p-4 p-md-5">
                 
-                <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-none mb-3" 
-                       style="border: 2px solid #0d6efd; font-size: 1.5rem;" 
-                       autofocus autocomplete="off" placeholder="Shoot the barcode scanner here...">
-                
-                <div id="result-log" class="mt-4 text-start">
-                    <p class="text-muted text-center">Waiting for scan...</p>
+                <div class="mb-4">
+                    <i class="bi bi-upc text-muted opacity-25" style="font-size: 5rem; line-height: 1;"></i>
+                    <h4 class="mt-2 fw-bold text-dark">Ready to Scan</h4>
+                    <p class="text-muted small">Point your barcode scanner and shoot</p>
                 </div>
+                
+                <div class="mx-auto" style="max-width: 600px;">
+                    <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-sm mb-4" 
+                           style="border: 2px solid var(--primary-color, #4f46e5); font-size: 1.5rem; letter-spacing: 2px; border-radius: 12px; background-color: #f8fafc;" 
+                           autofocus autocomplete="off" placeholder="Shoot barcode here...">
+                    
+                    <div id="result-log" class="text-start">
+                        <div class="text-center p-3 text-muted bg-light rounded-3 border border-dashed">
+                            <i class="bi bi-clock-history me-2"></i>Waiting for your first scan...
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
 
@@ -32,33 +60,27 @@
     const inputScanner = document.getElementById('scanner-input');
     const resultLog = document.getElementById('result-log');
 
-    // Mantiene el foco en el input del escáner en todo momento
+    // Keeps focus on the scanner input
     document.addEventListener('click', (e) => {
-        // Evitar robar el foco si el usuario hace clic explícitamente en los botones
-        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A') {
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')) {
             inputScanner.focus();
         }
     });
 
-    // Escuchar el Enter que manda la pistola láser
+    // Listen for scanner input
     inputScanner.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
             e.preventDefault();
             const barcode = inputScanner.value.trim();
-            inputScanner.value = ''; // Limpiamos para el próximo escaneo
-            
-            if (barcode) {
-                enviarCodigoAlBackend(barcode);
-            }
+            inputScanner.value = ''; 
+            if (barcode) { enviarCodigoAlBackend(barcode); }
         }
     });
 
+    // 1. SCAN BARCODE AND GENERATE THE 3-BUTTON UI
     async function enviarCodigoAlBackend(barcode) {
         try {
-            resultLog.innerHTML = `
-                <div class="alert alert-info py-3 fs-5" role="alert">
-                    ⏳ Searching barcode...
-                </div>`;
+            resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${barcode}</div>`;
             
             const response = await fetch('/scan', {
                 method: 'POST',
@@ -69,23 +91,131 @@
             const data = await response.json();
             
             if (response.ok && data.status === 'success') {
-                resultLog.innerHTML = `
-                    <div class="alert alert-success py-3 fs-5" role="alert">
-                        ✅ <strong>${data.message}</strong><br>
-                        🖨️ <strong>Job sent to printer.</strong>
-                    </div>`;
+                let html = `
+                    <div class="alert alert-info shadow-sm border-0 rounded-top-3 mb-0">
+                        <strong>UPC Found!</strong> Select an action for the physical box:
+                    </div>
+                    <div class="list-group list-group-flush border rounded-bottom-3 shadow-sm">
+                `;
+                
+                data.boxes.forEach(box => {
+                    const isDone = box.DONE.toLowerCase() === 'true';
+                    // We only disable the "Mark Done" button if it's already done
+                    const doneDisabledStr = isDone ? 'disabled' : '';
+                    const bgClass = isDone ? 'bg-light opacity-75' : '';
+                    
+                    const doneText = isDone ? '<i class="bi bi-check2-all"></i> Completed' : '<i class="bi bi-check-circle"></i> Mark Done';
+                    const doneBtnClass = isDone ? 'btn-outline-secondary' : 'btn-success';
+
+                    html += `
+                        <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${box.Row_Index}">
+                            <div class="mb-3 mb-xl-0 text-start">
+                                <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${box['Master Box #']}</span></h6>
+                                <div class="text-muted small">
+                                    <strong>Qty:</strong> ${box.Quantity} | <strong>Label:</strong> ${box['Amazon Labels']}
+                                </div>
+                            </div>
+                            
+                            <div class="btn-group shadow-sm w-100 w-xl-auto">
+                                <button class="btn btn-outline-dark btn-sm fw-bold" 
+                                        onclick="printShoeLabels(${box.Row_Index})">
+                                    <i class="bi bi-printer"></i> Shoes (${box.Quantity})
+                                </button>
+                                <button class="btn btn-outline-primary btn-sm fw-bold" 
+                                        onclick="printBigBoxLabel(${box.Row_Index})">
+                                    <i class="bi bi-box-seam"></i> Big Box
+                                </button>
+                                <button id="done-btn-${box.Row_Index}" class="btn ${doneBtnClass} btn-sm fw-bold" ${doneDisabledStr} 
+                                        onclick="markBoxDone('${data.UPC}', ${box.Row_Index})">
+                                    ${doneText}
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+                resultLog.innerHTML = html;
+
             } else {
-                resultLog.innerHTML = `
-                    <div class="alert alert-danger py-3 fs-5" role="alert">
-                        ❌ <strong>Error:</strong> ${data.message || 'Barcode not found'}
-                    </div>`;
+                resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3"><strong>Error:</strong> ${data.message}</div>`;
             }
         } catch (error) {
-            resultLog.innerHTML = `
-                <div class="alert alert-danger py-3 fs-5" role="alert">
-                    ❌ Server connection error. Please check if the server is running.
-                </div>`;
+            resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3">Connection Error</div>`;
         }
+    }
+
+    // 2. ACTION: PRINT SHOES
+    async function printShoeLabels(rowIndex) {
+        try {
+            const response = await fetch('/print_shoes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ row_index: rowIndex })
+            });
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+                alert("✅ " + data.message); 
+            } else {
+                alert("❌ Error: " + data.message);
+            }
+        } catch (error) {
+            alert("❌ Connection Error to Server");
+        }
+        inputScanner.focus();
+    }
+
+    // 3. ACTION: PRINT BIG BOX
+    async function printBigBoxLabel(rowIndex) {
+        try {
+            const response = await fetch('/print_big_box', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ row_index: rowIndex })
+            });
+            const data = await response.json();
+            
+            if (response.ok && data.status === 'success') {
+                alert("✅ " + data.message); 
+            } else {
+                alert("❌ Error: " + data.message);
+            }
+        } catch (error) {
+            alert("❌ Connection Error to Server");
+        }
+        inputScanner.focus();
+    }
+
+    // 4. ACTION: MARK DONE
+    async function markBoxDone(upc, rowIndex) {
+        try {
+            const response = await fetch('/mark_done', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ upc: upc, row_index: rowIndex })
+            });
+            
+            const data = await response.json();
+
+            if (response.ok && data.status === 'success') {
+                const rowElement = document.getElementById(`box-row-${rowIndex}`);
+                rowElement.classList.add('bg-light', 'opacity-75');
+                
+                // ONLY disable the "Mark Done" button, leaving print buttons active
+                const doneBtn = document.getElementById(`done-btn-${rowIndex}`);
+                doneBtn.disabled = true;
+                doneBtn.innerHTML = '<i class="bi bi-check2-all"></i> Completed';
+                doneBtn.classList.replace('btn-success', 'btn-outline-secondary');
+                
+                alert("✅ " + data.message);
+            } else {
+                alert("❌ Error marking done: " + data.message);
+            }
+        } catch (error) {
+            alert("❌ Connection Error");
+        }
+        inputScanner.focus();
     }
 </script>
 {% endblock %}
