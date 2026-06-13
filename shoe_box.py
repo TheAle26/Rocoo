@@ -5,8 +5,8 @@ from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
 from zebra_print import zebra_printer
 
-def print_label(FNSKU, quantity, pdf_path):
-    product_name = find_fnsku_in_pdf(FNSKU, pdf_path)
+
+def print_label(FNSKU, quantity, product_name):
     
     output_filename = f"current_label"
     
@@ -18,33 +18,72 @@ def print_label(FNSKU, quantity, pdf_path):
         print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
 
 
-def find_fnsku_in_pdf(FNSKU, pdf_path):
+def map_all_labels_in_pdf(pdf_path):
     """
-    Looks up the FNSKU in the PDF and returns the product name.
+    Reads the PDF ONCE and creates a dictionary of {FNSKU: Product Name}.
+    This is hundreds of times faster if you need to look up multiple codes.
     """
+    # Regex to find ANY standard FNSKU (they start with X and are usually 10 chars)
+    # and capture the name beneath it.
+    pattern = re.compile(r'(X[A-Z0-9]{9})\s*\n(.*?)(?=\n\s*New)', re.DOTALL)
+    
+    label_map = {}
+    
     try:
         with open(pdf_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
             
-            for page_num, page in enumerate(reader.pages):
+            print(f"Scanning {len(reader.pages)} pages...")
+            
+            for page in reader.pages:
                 text = page.extract_text()
                 
-                # Regex looks for the FNSKU, captures everything until the word "New"
-                pattern = re.compile(re.escape(FNSKU) + r'\s*\n(.*?)(?=\n\s*New)', re.DOTALL)
-                match = pattern.search(text)
+                # finditer gets EVERY match on the page, not just the first one
+                matches = pattern.finditer(text)
                 
-                if match:
-                    # Clean up the text (remove extra line breaks)
-                    product_name = match.group(1).replace('\n', ' ').strip()
-                    print(f"✅ Found '{FNSKU}' -> {product_name}")
-                    return product_name
+                for match in matches:
+                    fnsku = match.group(1)
+                    product_name = match.group(2).replace('\n', ' ').strip()
                     
-        print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
-        return None
+                    # Add to our dictionary
+                    if fnsku not in label_map:
+                        label_map[fnsku] = product_name
+                        
+        print(f"✅ Successfully mapped {len(label_map)} unique FNSKUs.")
+        return label_map
         
     except FileNotFoundError:
         print(f"Error: The file '{pdf_path}' was not found.")
-        return None
+        return {}
+    
+
+# def find_fnsku_in_pdf(FNSKU, pdf_path):
+#     """
+#     Looks up the FNSKU in the PDF and returns the product name.
+#     """
+#     try:
+#         with open(pdf_path, 'rb') as file:
+#             reader = PyPDF2.PdfReader(file)
+            
+#             for page_num, page in enumerate(reader.pages):
+#                 text = page.extract_text()
+                
+#                 # Regex looks for the FNSKU, captures everything until the word "New"
+#                 pattern = re.compile(re.escape(FNSKU) + r'\s*\n(.*?)(?=\n\s*New)', re.DOTALL)
+#                 match = pattern.search(text)
+                
+#                 if match:
+#                     # Clean up the text (remove extra line breaks)
+#                     product_name = match.group(1).replace('\n', ' ').strip()
+#                     print(f"✅ Found '{FNSKU}' -> {product_name}")
+#                     return product_name
+                    
+#         print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
+#         return None
+        
+#     except FileNotFoundError:
+#         print(f"Error: The file '{pdf_path}' was not found.")
+#         return None
     
 
 def save_label_as_picture(FNSKU, product_name, output_filename="label"):
