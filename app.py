@@ -217,6 +217,36 @@ def download_csv():
         return send_file(path_csv, as_attachment=True, download_name="updated_shipment.csv")
     else:
         return "CSV file not found. Please upload a shipment first.", 404
+    
+
+@app.route('/view_data')
+def view_data():
+    global df_memory
+    
+    # If there is no active session, redirect back to home
+    if df_memory is None:
+        return redirect(url_for('index'))
+
+    # Define EXACTLY which columns you want to display to the user
+    columns_to_show = [
+        'Master Box #',
+        'UPC/EAN (GTIN)',
+        'FNSKU',
+        'Quantity',
+        'Amazon Labels',
+        'DONE'
+    ]
+
+    # Filter to only include columns that actually exist in the dataframe (safety check)
+    available_cols = [col for col in columns_to_show if col in df_memory.columns]
+    df_subset = df_memory[available_cols]
+
+    # Convert the dataframe to a list of dictionaries so Jinja/HTML can easily read it
+    table_data = df_subset.to_dict(orient='records')
+
+    return render_template('view_data.html', table_data=table_data, columns=available_cols)
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)

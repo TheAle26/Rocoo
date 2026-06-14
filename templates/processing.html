@@ -10,10 +10,13 @@
             </a>
             
             <div class="d-flex flex-column flex-sm-row gap-2">
+                <a href="{{ url_for('view_data') }}" target="_blank" class="btn btn-outline-primary shadow-sm rounded-3 px-3 py-2 fw-medium">
+                    <i class="bi bi-box-arrow-up-right me-2"></i>View Data
+                </a>
+                
                 <a href="{{ url_for('download_csv') }}" class="btn btn-outline-success shadow-sm rounded-3 px-3 py-2 fw-medium">
                     <i class="bi bi-file-earmark-spreadsheet me-2"></i>Download (CSV)
                 </a>
-                
             </div>
         </div>
 
@@ -75,6 +78,34 @@
         }
     });
 
+    // --- NEW: AUTO-DISMISSING NOTIFICATION SYSTEM ---
+    function showNotification(message, isSuccess = true) {
+        // Create the popup element
+        const toast = document.createElement('div');
+        
+        // Define colors and icons based on success or error
+        const bgClass = isSuccess ? 'bg-success' : 'bg-danger';
+        const icon = isSuccess ? 'bi-check-circle-fill' : 'bi-exclamation-octagon-fill';
+        
+        // Apply Bootstrap styling to make it float at the top center
+        toast.className = `alert ${bgClass} text-white shadow-lg fw-bold position-fixed top-0 start-50 translate-middle-x mt-4`;
+        toast.style.minWidth = '300px';
+        toast.style.zIndex = '9999'; // Ensure it stays on top of everything
+        toast.style.transition = 'opacity 0.5s ease'; // Smooth fade out
+        
+        toast.innerHTML = `<i class="bi ${icon} me-2"></i> ${message}`;
+        
+        // Add it to the screen
+        document.body.appendChild(toast);
+        
+        // Automatically remove it after 3 seconds
+        setTimeout(() => {
+            toast.style.opacity = '0'; // Start fade out
+            setTimeout(() => toast.remove(), 500); // Delete from DOM after fade finishes
+        }, 3000);
+    }
+    // ------------------------------------------------
+
     // 1. SCAN BARCODE AND GENERATE THE 3-BUTTON UI
     async function enviarCodigoAlBackend(barcode) {
         try {
@@ -98,7 +129,6 @@
                 
                 data.boxes.forEach(box => {
                     const isDone = box.DONE.toLowerCase() === 'true';
-                    // We only disable the "Mark Done" button if it's already done
                     const doneDisabledStr = isDone ? 'disabled' : '';
                     const bgClass = isDone ? 'bg-light opacity-75' : '';
                     
@@ -113,7 +143,6 @@
                                     <strong>Qty:</strong> ${box.Quantity} | <strong>Label:</strong> ${box['Amazon Labels']}
                                 </div>
                             </div>
-                            
                             
                             <div class="btn-group shadow-sm w-100 w-xl-auto">
                                 <button class="btn btn-outline-dark btn-sm fw-bold" 
@@ -144,50 +173,44 @@
         }
     }
 
-
-    // 2. ACTION: PRINT SHOES (Sends FNSKU and Quantity)
+    // 2. ACTION: PRINT SHOES
     async function printShoeLabels(fnsku, quantity) {
         try {
             const response = await fetch('/print_shoes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    fnsku: fnsku, 
-                    quantity: quantity 
-                })
+                body: JSON.stringify({ fnsku: fnsku, quantity: quantity })
             });
             const data = await response.json();
             
             if (response.ok && data.status === 'success') {
-                alert("✅ " + data.message); 
+                showNotification(data.message, true); 
             } else {
-                alert("❌ Error: " + data.message);
+                showNotification(data.message, false);
             }
         } catch (error) {
-            alert("❌ Connection Error to Server");
+            showNotification("Connection Error to Server", false);
         }
         inputScanner.focus();
     }
 
-    // 3. ACTION: PRINT BIG BOX (Sends Amazon Label)
+    // 3. ACTION: PRINT BIG BOX
     async function printBigBoxLabel(amazonLabel) {
         try {
             const response = await fetch('/print_big_box', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    amazon_label: amazonLabel 
-                })
+                body: JSON.stringify({ amazon_label: amazonLabel })
             });
             const data = await response.json();
             
             if (response.ok && data.status === 'success') {
-                alert("✅ " + data.message); 
+                showNotification(data.message, true); 
             } else {
-                alert("❌ Error: " + data.message);
+                showNotification(data.message, false);
             }
         } catch (error) {
-            alert("❌ Connection Error to Server");
+            showNotification("Connection Error to Server", false);
         }
         inputScanner.focus();
     }
@@ -207,20 +230,20 @@
                 const rowElement = document.getElementById(`box-row-${rowIndex}`);
                 rowElement.classList.add('bg-light', 'opacity-75');
                 
-                // ONLY disable the "Mark Done" button, leaving print buttons active
                 const doneBtn = document.getElementById(`done-btn-${rowIndex}`);
                 doneBtn.disabled = true;
                 doneBtn.innerHTML = '<i class="bi bi-check2-all"></i> Completed';
                 doneBtn.classList.replace('btn-success', 'btn-outline-secondary');
                 
-                alert("✅ " + data.message);
+                showNotification(data.message, true);
             } else {
-                alert("❌ Error marking done: " + data.message);
+                showNotification(data.message, false);
             }
         } catch (error) {
-            alert("❌ Connection Error");
+            showNotification("Connection Error", false);
         }
         inputScanner.focus();
     }
+
 </script>
 {% endblock %}

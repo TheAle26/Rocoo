@@ -3,6 +3,7 @@ import re
 import barcode
 from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
+import textwrap
 from zebra_print import zebra_printer
 
 
@@ -11,7 +12,7 @@ def print_label(FNSKU, quantity, product_name):
     output_filename = f"current_label"
     
     if product_name:
-        save_label_as_picture(FNSKU, product_name, output_filename)
+        #save_label_as_picture(FNSKU, product_name, output_filename)
         print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
         zebra_printer(FNSKU, product_name,quantity)
 
@@ -58,6 +59,74 @@ def map_all_labels_in_pdf(pdf_path):
         return {}
     
 
+
+def save_label_as_picture(fnsku, product_name, output_filename="label"):
+    """
+    Generates a PNG image matching the Amazon PDF layout.
+    Keeps the product name on a single line and uses middle-truncation 
+    for very long names, exactly like the provided PDF.
+    """
+    try:
+        # 1. Replicate Amazon's middle-truncation rule
+        # The PDF fits about 48-50 characters max on one line.
+        max_chars = 48
+        if len(product_name) > max_chars:
+            # e.g., "Hoka Men's Gaviota 6 Mid...ue/Faded Navy 10.5 Medium"
+            keep_front = 24
+            keep_back = max_chars - keep_front - 3 # Subtract 3 for the "..."
+            display_text = product_name[:keep_front] + "..." + product_name[-keep_back:]
+        else:
+            display_text = product_name
+
+        # 2. Generate the Code 128 barcode
+        # Adjusted width and height for a crisp, scannable barcode
+        writer_options = {
+            'module_width': 0.25,  
+            'module_height': 12.0,
+            'font_size': 10,
+            'text_distance': 4.0,
+        }
+        
+        code128 = barcode.get_barcode_class('code128')
+        bc = code128(fnsku, writer=ImageWriter())
+        
+        # Save the initial barcode (it automatically appends .png)
+        filename = bc.save(output_filename, options=writer_options)
+        
+        # 3. Open the image to add the product name
+        img = Image.open(filename)
+        width, height = img.size
+        
+        # Create a new, slightly taller image to fit the two text lines perfectly
+        extra_height = 45
+        new_img = Image.new('RGB', (width, height + extra_height), 'white')
+        new_img.paste(img, (0, 0))
+        
+        # 4. Draw the text
+        draw = ImageDraw.Draw(new_img)
+        try:
+            # We use size 16 so that ~48 characters fit smoothly on a single line
+            font = ImageFont.truetype("arial.ttf", 20) 
+        except IOError:
+            print("Arial font not found, falling back to default.")
+            font = ImageFont.load_default()
+        
+        # Draw the single-line product name directly below the barcode
+        pos_y_name = height + 2
+        draw.text((10, pos_y_name), display_text, fill="black", font=font)
+        
+        # Draw "New" directly below the product name
+        pos_y_new = pos_y_name + 20
+        draw.text((10, pos_y_new), "New", fill="black", font=font)
+        
+        # Save the final image
+        new_img.save(filename)
+        print(f"✅ Picture successfully saved as: {filename}")
+        
+    except Exception as e:
+        print(f"❌ Error generating picture: {e}")
+        
+        
 # def find_fnsku_in_pdf(FNSKU, pdf_path):
 #     """
 #     Looks up the FNSKU in the PDF and returns the product name.
@@ -86,54 +155,3 @@ def map_all_labels_in_pdf(pdf_path):
 #         print(f"Error: The file '{pdf_path}' was not found.")
 #         return None
     
-
-def save_label_as_picture(FNSKU, product_name, output_filename="label"):
-    """
-    Method 1: Generates a PNG image with the barcode and the product name underneath.
-    """
-    try:
-        # 1. Generate the Code 128 barcode
-        code128 = barcode.get_barcode_class('code128')
-        bc = code128(FNSKU, writer=ImageWriter())
-        
-        # Save the initial barcode (it automatically appends .png)
-        filename = bc.save(output_filename)
-        
-        # 2. Open the image to add the product name
-        img = Image.open(filename)
-        width, height = img.size
-        
-        # Create a new, taller image to fit the text at the bottom
-        text_space = 60
-        new_img = Image.new('RGB', (width, height + text_space), 'white')
-        new_img.paste(img, (0, 0))
-        
-        # 3. Draw the product name
-        draw = ImageDraw.Draw(new_img)
-        try:
-            # Cambia '20' para hacer el texto más grande o pequeño
-            font = ImageFont.truetype("arial.ttf", 20) 
-        except IOError:
-            print("Arial font not found, falling back to default.")
-            font = ImageFont.load_default()
-        
-        # Truncate text if it's too long for the image width
-        display_text = product_name[:60] + "..." if len(product_name) > 60 else product_name
-        
-        # Calculamos las posiciones verticales (Y)
-        # 'height' es donde termina el código de barras original
-        posicion_y_nombre = height + 5   # Justo debajo del código de barras
-        posicion_y_new = height + 35     # Un poco más abajo para dar espacio a la primera línea
-        
-        # Dibujamos el nombre del producto
-        draw.text((10, posicion_y_nombre), display_text, fill="black", font=font)
-        
-        # Dibujamos la palabra "NEW" debajo
-        draw.text((10, posicion_y_new), "NEW", fill="black", font=font)
-        
-        # Save the final image
-        new_img.save(filename)
-        print(f"✅ Picture successfully saved as: {filename}")
-        
-    except Exception as e:
-        print(f"❌ Error generating picture: {e}")

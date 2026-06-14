@@ -1,0 +1,114 @@
+{% extends "index.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10 col-xl-10">
+        
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+            <div class="d-flex gap-2">
+                
+                <a href="{{ url_for('view_data') }}" class="btn btn-info text-white shadow-sm fw-bold rounded-3 px-3 py-2">
+                    <i class="bi bi-arrow-clockwise me-2"></i>Refresh Data
+                </a>
+            </div>
+            <h5 class="mb-0 fw-bold text-dark">Shipment Overview</h5>
+        </div>
+
+        <div class="card main-card shadow-sm border-0">
+            
+            <div class="card-header-custom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                <div>
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-table me-2 text-primary"></i>Current Data State</h6>
+                    <span class="text-muted small">Live from memory (Read-Only)</span>
+                </div>
+                
+                <div style="min-width: 300px;">
+                    <div class="input-group shadow-sm">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" id="tableSearch" class="form-control border-start-0" placeholder="Search all columns...">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 600px; overflow-y: auto;">
+                    <table class="table table-hover align-middle mb-0" id="dataTable">
+                        <thead class="table-light sticky-top shadow-sm">
+                            <tr>
+                                {% for col in columns %}
+                                <th scope="col" class="py-3 px-4">{{ col }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in table_data %}
+                            
+                            {% set is_done = row.get('DONE', '')|string|lower == 'true' %}
+                            
+                            <tr class="{% if is_done %}table-success{% endif %}">
+                                {% for col in columns %}
+                                    <td class="px-4">
+                                        {% if col == 'DONE' %}
+                                            {% if is_done %}
+                                                <span class="badge bg-success px-2 py-1 shadow-sm"><i class="bi bi-check2-all me-1"></i>Yes</span>
+                                            {% else %}
+                                                <span class="badge bg-secondary bg-opacity-25 text-dark px-2 py-1">No</span>
+                                            {% endif %}
+                                        {% else %}
+                                            {{ row[col] }}
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    
+                    <div id="noResults" class="text-center p-5 text-muted d-none">
+                        <i class="bi bi-search text-muted opacity-25" style="font-size: 3rem;"></i>
+                        <p class="mt-3 fw-medium">No matching records found.</p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // NEW: REAL-TIME JAVASCRIPT SEARCH ENGINE
+    document.getElementById('tableSearch').addEventListener('keyup', function() {
+        // 1. Get whatever the user typed and make it lowercase
+        let filter = this.value.toLowerCase();
+        
+        // 2. Grab every single row in the table body
+        let rows = document.querySelectorAll('#dataTable tbody tr');
+        let noResults = document.getElementById('noResults');
+        let hasVisibleRows = false;
+
+        // 3. Loop through the rows
+        rows.forEach(row => {
+            // textContent automatically grabs all text from all columns in that row!
+            let text = row.textContent.toLowerCase();
+            
+            // If the row contains the search term, show it. Otherwise, hide it.
+            if(text.includes(filter)) {
+                row.style.display = '';
+                hasVisibleRows = true;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // 4. Show a friendly "No results" message if the search was completely empty
+        if(hasVisibleRows) {
+            noResults.classList.add('d-none');
+        } else {
+            noResults.classList.remove('d-none');
+        }
+    });
+</script>
+{% endblock %}
