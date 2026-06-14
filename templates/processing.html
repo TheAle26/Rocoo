@@ -13,9 +13,7 @@
                 <a href="{{ url_for('download_csv') }}" class="btn btn-outline-success shadow-sm rounded-3 px-3 py-2 fw-medium">
                     <i class="bi bi-file-earmark-spreadsheet me-2"></i>Download (CSV)
                 </a>
-                <button class="btn btn-warning text-dark shadow-sm rounded-3 px-3 py-2 fw-bold" onclick="printBigBox()">
-                    <i class="bi bi-printer-fill me-2"></i>PRINT BIG BOX
-                </button>
+                
             </div>
         </div>
 
@@ -116,13 +114,14 @@
                                 </div>
                             </div>
                             
+                            
                             <div class="btn-group shadow-sm w-100 w-xl-auto">
                                 <button class="btn btn-outline-dark btn-sm fw-bold" 
-                                        onclick="printShoeLabels(${box.Row_Index})">
+                                        onclick="printShoeLabels('${box.FNSKU}', ${box.Quantity})">
                                     <i class="bi bi-printer"></i> Shoes (${box.Quantity})
                                 </button>
                                 <button class="btn btn-outline-primary btn-sm fw-bold" 
-                                        onclick="printBigBoxLabel(${box.Row_Index})">
+                                        onclick="printBigBoxLabel('${box['Amazon Labels']}')">
                                     <i class="bi bi-box-seam"></i> Big Box
                                 </button>
                                 <button id="done-btn-${box.Row_Index}" class="btn ${doneBtnClass} btn-sm fw-bold" ${doneDisabledStr} 
@@ -145,13 +144,17 @@
         }
     }
 
-    // 2. ACTION: PRINT SHOES
-    async function printShoeLabels(rowIndex) {
+
+    // 2. ACTION: PRINT SHOES (Sends FNSKU and Quantity)
+    async function printShoeLabels(fnsku, quantity) {
         try {
             const response = await fetch('/print_shoes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ row_index: rowIndex })
+                body: JSON.stringify({ 
+                    fnsku: fnsku, 
+                    quantity: quantity 
+                })
             });
             const data = await response.json();
             
@@ -166,13 +169,15 @@
         inputScanner.focus();
     }
 
-    // 3. ACTION: PRINT BIG BOX
-    async function printBigBoxLabel(rowIndex) {
+    // 3. ACTION: PRINT BIG BOX (Sends Amazon Label)
+    async function printBigBoxLabel(amazonLabel) {
         try {
             const response = await fetch('/print_big_box', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ row_index: rowIndex })
+                body: JSON.stringify({ 
+                    amazon_label: amazonLabel 
+                })
             });
             const data = await response.json();
             

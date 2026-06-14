@@ -3,3 +3,5 @@
 __pycache__/
 *.pyc
 output/
+current_label.png
+git

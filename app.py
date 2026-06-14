@@ -2,10 +2,7 @@ from flask import Flask, request, render_template, jsonify, redirect, url_for, s
 import os
 import concurrent.futures
 import pandas as pd
-
-# Import your external functions
 from shoe_box import print_label, map_all_labels_in_pdf
-# (Make sure to put the two new dictionary builders we just wrote into big_box.py or search_cvs.py and import them here)
 from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict 
 
 app = Flask(__name__, static_folder='static')
@@ -27,17 +24,17 @@ BIG_BOX_PDF_FILENAME = 'box_labels_actual_shipment.pdf'
 SMALL_BOX_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
 
 
-def process_pdfs_concurrently(shoe_path, box_path, memory_df):
+def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
     """
     Runs all 3 parsers at the exact same time using 3 background threads.
     """
     global label_map, bix_box_map, master_upc_map
-    print("🚀 Starting parallel processing (Shoe PDF, Box PDF, and CSV Map)...")
+    print("Starting parallel processing (Shoe PDF, Box PDF, and CSV Map)...")
     
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # 1. Dispatch all three tasks
-        future_shoes = executor.submit(map_all_labels_in_pdf, shoe_path)
-        future_boxes = executor.submit(build_amazon_label_to_page_dict, box_path, memory_df)
+        future_shoes = executor.submit(map_all_labels_in_pdf, small_label_path)
+        future_boxes = executor.submit(build_amazon_label_to_page_dict, bix_box_path, memory_df)
         future_master = executor.submit(build_master_upc_dict, memory_df)
         
         # 2. Wait and grab results
@@ -128,25 +125,26 @@ def scan_barcode():
     })
 
 
-# --- ROUTE 1: PRINT SHOES ONLY ---
+# --- ROUTE 1: PRINT SHOES ONLY (Stateless) ---
 @app.route('/print_shoes', methods=['POST'])
 def print_shoes():
     data = request.get_json()
-    row_index = data.get('row_index')
+    fnsku = data.get('fnsku')
+    quantity = data.get('quantity')
 
-    if row_index is None:
-        return jsonify({"status": "error", "message": "Missing row_index."}), 400
+    if not fnsku or quantity is None:
+        return jsonify({"status": "error", "message": "Missing FNSKU or quantity."}), 400
         
-    row_index = int(row_index)
-    global df_memory, label_map
+    global label_map
     
-    fnsku = df_memory.at[row_index, 'FNSKU']
-    quantity = int(float(df_memory.at[row_index, 'Quantity']))
+    # We still use label_map to find the name, but we don't need the CSV memory anymore!
     product_name = label_map.get(fnsku, "Unknown Product")
     
+    if product_name == "Unknown Product":
+        return jsonify({"status": "error", "message": f"FNSKU {fnsku} not found in PDF."}), 404
+    
     try:
-        # Prints the exact quantity specified in the CSV
-        print_label(fnsku, quantity, product_name)
+        print_label(fnsku, int(quantity), product_name)
         return jsonify({
             "status": "success", 
             "message": f"Sent {quantity} shoe labels to the printer!"
@@ -155,29 +153,25 @@ def print_shoes():
         return jsonify({"status": "error", "message": f"Shoe printer error: {str(e)}"}), 500
 
 
-# --- ROUTE 2: PRINT BIG BOX ONLY ---
+# --- ROUTE 2: PRINT BIG BOX ONLY (Stateless) ---
 @app.route('/print_big_box', methods=['POST'])
 def print_big_box():
     data = request.get_json()
-    row_index = data.get('row_index')
+    amazon_label = data.get('amazon_label')
 
-    if row_index is None:
-        return jsonify({"status": "error", "message": "Missing row_index."}), 400
+    if not amazon_label:
+        return jsonify({"status": "error", "message": "Missing Amazon Label."}), 400
         
-    row_index = int(row_index)
-    global df_memory, bix_box_map
+    global bix_box_map
     
-    amazon_label = df_memory.at[row_index, 'Amazon Labels']
+    # We just translate the label to a page number using our O(1) dictionary
     big_box_page_num = bix_box_map.get(amazon_label)
     
     if big_box_page_num is None:
-        return jsonify({"status": "error", "message": f"Page for label {amazon_label} not found."}), 404
+        return jsonify({"status": "error", "message": f"Page for label {amazon_label} not found in PDF."}), 404
 
     try:
-        # Insert your actual big box print logic here!
         # print_amazon_labels(amazon_label, big_box_page_num)
-        
-        # We return the human-readable page number (+1) just in case the UI wants to show it
         return jsonify({
             "status": "success",
             "message": f"Sent Big Box label (Page {big_box_page_num + 1}) to printer!",
@@ -187,7 +181,7 @@ def print_big_box():
         return jsonify({"status": "error", "message": f"Big Box printer error: {str(e)}"}), 500
 
 
-# --- ROUTE 3: MARK DONE ONLY ---
+# --- ROUTE 3: MARK DONE ONLY (Needs row_index to update CSV) ---
 @app.route('/mark_done', methods=['POST'])
 def mark_done():
     data = request.get_json()
@@ -200,21 +194,16 @@ def mark_done():
     row_index = int(row_index)
     global df_memory, master_upc_map
     
-    # 1. Update CSV and save to disk
     df_memory.at[row_index, 'DONE'] = 'True'
     path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
     df_memory.to_csv(path_csv, index=False)
     
-    # 2. Update memory dict so UI stays in sync
     for box in master_upc_map[upc]:
         if box['Row_Index'] == row_index:
             box['DONE'] = 'True'
             break
             
-    return jsonify({
-        "status": "success",
-        "message": f"Box marked DONE in CSV."
-    })
+    return jsonify({"status": "success", "message": f"Box marked DONE."})
     
 @app.route('/download_csv')
 def download_csv():
