@@ -13,12 +13,20 @@
 </head>
 <body>
 <nav class="navbar-custom">
-    <div class="container d-flex align-items-center">
-        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo me-3" onerror="this.style.display='none'">
-        <div>
-            <h1 class="h6 mb-0 fw-bold">Shipping Tool</h1>
-            <span class="text-muted" style="font-size: 0.75rem;">Upload shipment data and processing labels</span>
+    <div class="container d-flex align-items-center justify-content-between">
+        
+        <div class="d-flex align-items-center">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="logo me-3" onerror="this.style.display='none'">
+            <div>
+                <h1 class="h6 mb-0 fw-bold">Shipping Tool</h1>
+                <span class="text-muted" style="font-size: 0.75rem;">Upload shipment data and processing labels</span>
+            </div>
         </div>
+
+        <button onclick="shutdownApp()" class="btn btn-danger btn-sm shadow-sm fw-bold d-flex align-items-center px-3 rounded-3" title="Shut Down Application">
+            <i class="bi bi-power me-2"></i> Shut down
+        </button>
+        
     </div>
 </nav>
 
@@ -123,6 +131,24 @@
 {% block scripts %}
 <script>
     // Helper to show file names and validate extensions, now with rich UI elements
+
+    async function shutdownApp() {
+        if(confirm("Are you sure you want to shut down the Shipping Tool?")) {
+            try {
+                await fetch('/shutdown', { method: 'POST' });
+                document.body.innerHTML = `
+                    <div style="display:flex; height:100vh; align-items:center; justify-content:center; background:#f8fafc; text-align:center;">
+                        <div>
+                            <i class="bi bi-power text-danger" style="font-size: 4rem;"></i>
+                            <h2 class="mt-3 fw-bold">System Offline</h2>
+                            <p class="text-muted">The server has been safely shut down. You can close this browser tab.</p>
+                        </div>
+                    </div>`;
+            } catch (error) {
+                alert("App is already shut down or unresponsive.");
+            }
+        }
+    }
     function showFileName(inputEl, outElId, allowedExtRegex) {
         const out = document.getElementById(outElId);
         const file = inputEl.files[0];

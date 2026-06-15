@@ -1,0 +1,114 @@
+import win32print
+import win32ui
+from PIL import Image, ImageWin
+import time
+import json
+import os
+import fitz  # This is PyMuPDF
+
+
+
+def get_printer_names():
+    """Reads the exact printer names from the JSON file."""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, 'printers.json')
+    
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("⚠️ printers.json not found! Using default Windows printers.")
+        return {"shoe_printer": None, "big_box_printer": None}
+
+def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
+    """
+    Silently sends a saved image directly to a specific Windows printer based on its type.
+    """
+    # 1. Load the printer names from the config file
+    config = get_printer_names()
+    printer_name = config.get(printer_type)
+    
+    try:
+        # 2. Use the specific printer, or fallback to Default if none is found
+        if not printer_name:
+            printer_name = win32print.GetDefaultPrinter()
+            print(f"No printer specified for {printer_type}. Falling back to default: {printer_name}")
+        else:
+            print(f"🖨️ Connecting to {printer_type}: '{printer_name}'")
+        
+        # 3. Open the PNG label you generated
+        img = Image.open(image_path)
+        img = img.convert('L') # Pure black & white
+        
+        # 4. Send to printer 'quantity' times
+        for _ in range(quantity):
+            hDC = win32ui.CreateDC()
+            hDC.CreatePrinterDC(printer_name)
+            
+            printable_area = hDC.GetDeviceCaps(8), hDC.GetDeviceCaps(10)
+            
+            hDC.StartDoc(image_path)
+            hDC.StartPage()
+            
+            dib = ImageWin.Dib(img)
+            dib.draw(hDC.GetHandleOutput(), (0, 0, printable_area[0], printable_area[1]))
+            
+            hDC.EndPage()
+            hDC.EndDoc()
+            hDC.DeleteDC()
+            
+            time.sleep(0.2) 
+            
+        print(f"✅ Successfully printed {quantity} labels to {printer_name}!")
+        return True
+        
+    except Exception as e:
+        print(f"❌ Windows Printer Error on '{printer_name}': {e}")
+        return False
+
+# --- HELPER FUNCTION FOR WORKERS ---
+def list_available_printers():
+    """Workers can run this to see what to type into printers.json."""
+    print("\n--- AVAILABLE WINDOWS PRINTERS ---")
+    printers = win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS)
+    for p in printers:
+        print(f'"{p[2]}"')
+    print("----------------------------------\n")
+    
+    
+
+
+def print_amazon_label(pdf_path, page_num):
+    """
+    Extracts a single page from the Big Box PDF, converts it to a crisp PNG, 
+    and sends it to the dedicated Big Box thermal printer.
+    """
+    output_filename = "current_big_box_label.png"
+    
+    try:
+        # 1. Open the PDF file
+        doc = fitz.open(pdf_path)
+        
+        # 2. Go to the exact page (PyMuPDF uses 0-based indexing, just like your dictionary!)
+        page = doc.load_page(page_num)
+        
+        # 3. Render the page as an image. 
+        # dpi=300 ensures the barcodes are razor sharp for the thermal printer.
+        pix = page.get_pixmap(dpi=300)
+        
+        # 4. Save the image to the disk
+        pix.save(output_filename)
+        doc.close()
+        
+        print(f"✅ Successfully extracted Page {page_num + 1} to {output_filename}")
+        
+        # 5. Send it to the Windows print spooler!
+        # Notice we are explicitly targeting the "big_box_printer" from your JSON config
+        success = print_image_to_printer(output_filename, quantity=1, printer_type="big_box_printer")
+        
+        if not success:
+            raise Exception("Windows Spooler failed to print the image.")
+            
+    except Exception as e:
+        print(f"❌ Error extracting and printing Big Box label: {e}")
+        raise e  # Re-raise so app.py can catch it and show the error on the UI

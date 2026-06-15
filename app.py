@@ -4,6 +4,10 @@ import concurrent.futures
 import pandas as pd
 from shoe_box import print_label, map_all_labels_in_pdf
 from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict 
+import signal
+from printer import print_amazon_label
+
+
 
 app = Flask(__name__, static_folder='static')
 
@@ -153,6 +157,9 @@ def print_shoes():
         return jsonify({"status": "error", "message": f"Shoe printer error: {str(e)}"}), 500
 
 
+# Make sure to import your new function at the top of app.py!
+# from big_box import print_amazon_label 
+
 # --- ROUTE 2: PRINT BIG BOX ONLY (Stateless) ---
 @app.route('/print_big_box', methods=['POST'])
 def print_big_box():
@@ -164,14 +171,19 @@ def print_big_box():
         
     global bix_box_map
     
-    # We just translate the label to a page number using our O(1) dictionary
+    # Translate the label to a page number using our O(1) dictionary
     big_box_page_num = bix_box_map.get(amazon_label)
     
     if big_box_page_num is None:
         return jsonify({"status": "error", "message": f"Page for label {amazon_label} not found in PDF."}), 404
 
     try:
-        # print_amazon_labels(amazon_label, big_box_page_num)
+        # Construct the full path to the Big Box PDF
+        pdf_path = os.path.join(OUTPUT_FOLDER, BIG_BOX_PDF_FILENAME) # Adjust this variable if your PDF is named differently!
+        
+        # Call our new extraction and printing function
+        print_amazon_label(pdf_path, big_box_page_num)
+        
         return jsonify({
             "status": "success",
             "message": f"Sent Big Box label (Page {big_box_page_num + 1}) to printer!",
@@ -179,7 +191,6 @@ def print_big_box():
         })
     except Exception as e:
         return jsonify({"status": "error", "message": f"Big Box printer error: {str(e)}"}), 500
-
 
 # --- ROUTE 3: MARK DONE ONLY (Needs row_index to update CSV) ---
 @app.route('/mark_done', methods=['POST'])
@@ -229,7 +240,7 @@ def view_data():
 
     # Define EXACTLY which columns you want to display to the user
     columns_to_show = [
-        'Master Box #',
+        ' Master Box #',
         'UPC/EAN (GTIN)',
         'FNSKU',
         'Quantity',
@@ -247,6 +258,14 @@ def view_data():
     return render_template('view_data.html', table_data=table_data, columns=available_cols)
 
 
+
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    """Gracefully shuts down the Flask server."""
+    print("🛑 Shutting down server by user request...")
+    # Sends a termination signal to the current process
+    os.kill(os.getpid(), signal.SIGTERM)
+    return jsonify({"status": "success", "message": "Server is shutting down. You can close this window."})
 
 if __name__ == '__main__':
     app.run(debug=True)

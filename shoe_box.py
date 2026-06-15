@@ -5,6 +5,8 @@ from barcode.writer import ImageWriter
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
 from zebra_print import zebra_printer
+from printer import print_image_to_printer
+
 
 
 def print_label(FNSKU, quantity, product_name):
@@ -12,9 +14,11 @@ def print_label(FNSKU, quantity, product_name):
     output_filename = f"current_label"
     
     if product_name:
-        #save_label_as_picture(FNSKU, product_name, output_filename)
+        save_label_as_picture(FNSKU, product_name, output_filename)
         print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
-        zebra_printer(FNSKU, product_name,quantity)
+        #zebra_printer(FNSKU, product_name,quantity)
+        filename = f"{output_filename}.png"
+        print_image_to_printer(filename, quantity, printer_type="shoe_printer")
 
     else:
         print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
@@ -59,7 +63,6 @@ def map_all_labels_in_pdf(pdf_path):
         return {}
     
 
-
 def save_label_as_picture(fnsku, product_name, output_filename="label"):
     """
     Generates a PNG image matching the Amazon PDF layout.
@@ -68,23 +71,22 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
     """
     try:
         # 1. Replicate Amazon's middle-truncation rule
-        # The PDF fits about 48-50 characters max on one line.
-        max_chars = 48
+        # Reduced max_chars slightly to 42 because the font is now bigger
+        max_chars = 42 
         if len(product_name) > max_chars:
-            # e.g., "Hoka Men's Gaviota 6 Mid...ue/Faded Navy 10.5 Medium"
-            keep_front = 24
-            keep_back = max_chars - keep_front - 3 # Subtract 3 for the "..."
+            keep_front = 20
+            keep_back = max_chars - keep_front - 3 
             display_text = product_name[:keep_front] + "..." + product_name[-keep_back:]
         else:
             display_text = product_name
 
         # 2. Generate the Code 128 barcode
-        # Adjusted width and height for a crisp, scannable barcode
         writer_options = {
             'module_width': 0.25,  
             'module_height': 12.0,
             'font_size': 10,
             'text_distance': 4.0,
+            'font_path': 'arial.ttf' # <-- THIS REMOVES THE DOTTED ZERO
         }
         
         code128 = barcode.get_barcode_class('code128')
@@ -97,16 +99,16 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         img = Image.open(filename)
         width, height = img.size
         
-        # Create a new, slightly taller image to fit the two text lines perfectly
-        extra_height = 45
+        # Create a new, taller image to fit the larger text
+        extra_height = 60 # <-- Increased from 45 to give the bigger text more room
         new_img = Image.new('RGB', (width, height + extra_height), 'white')
         new_img.paste(img, (0, 0))
         
         # 4. Draw the text
         draw = ImageDraw.Draw(new_img)
         try:
-            # We use size 16 so that ~48 characters fit smoothly on a single line
-            font = ImageFont.truetype("arial.ttf", 20) 
+            # <-- Increased font size from 20 to 24
+            font = ImageFont.truetype("arial.ttf", 24) 
         except IOError:
             print("Arial font not found, falling back to default.")
             font = ImageFont.load_default()
@@ -116,7 +118,7 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         draw.text((10, pos_y_name), display_text, fill="black", font=font)
         
         # Draw "New" directly below the product name
-        pos_y_new = pos_y_name + 20
+        pos_y_new = pos_y_name + 26 # <-- Increased from 20 to account for taller letters
         draw.text((10, pos_y_new), "New", fill="black", font=font)
         
         # Save the final image
@@ -125,7 +127,6 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         
     except Exception as e:
         print(f"❌ Error generating picture: {e}")
-        
         
 # def find_fnsku_in_pdf(FNSKU, pdf_path):
 #     """

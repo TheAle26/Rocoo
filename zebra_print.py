@@ -1,14 +1,26 @@
 import socket
+import os
 
-import socket
+def get_printer_ip():
+    """Reads the printer IP from a text file so non-tech users can change it easily."""
+    try:
+        # Looks for printer_ip.txt in the same folder as the app
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        ip_file = os.path.join(base_dir, 'printer_ip.txt')
+        with open(ip_file, 'r') as f:
+            return f.read().strip()
+    except Exception:
+        return "192.168.1.100"  # Default fallback if the file is missing
+    
 
-def zebra_printer(fnsku, product_name, quantity, printer_ip="192.168.1.100", port=9100):    
+
+def zebra_printer(fnsku, product_name, quantity, port=9100):    
     """
     Exclusively sends ZPL commands to a network Zebra printer.
     Ensures perfect quality, exact sizing, and prevents text cut-offs.
     The ^CI0,26,48 command removes the dot/slash from the zero.
     """
-    
+    printer_ip = get_printer_ip()  # Get the printer IP from the text file
     # ZPL code. 
     # ^CI0,26,48 maps the dotted zero to a clean zero.
     # ^FBwidth,lines,spaces,align,indent creates a text box to wrap long names.
