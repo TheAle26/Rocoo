@@ -83,7 +83,7 @@ def index():
 
         if 'DONE' not in df_memory.columns:
             df_memory['DONE'] = 'False'   
-        df_memory = df_memory.columns.str.strip()  # Remove any leading/trailing spaces from column names
+        df_memory.columns = df_memory.columns.str.strip()
         df_memory.to_csv(path_csv, index=False)  
               
         # Launch the background builders
@@ -268,4 +268,4 @@ def shutdown():
     return jsonify({"status": "success", "message": "Server is shutting down. You can close this window."})
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
