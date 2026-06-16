@@ -240,7 +240,7 @@ def view_data():
 
     # Define EXACTLY which columns you want to display to the user
     columns_to_show = [
-        ' Master Box #',
+        'Master Box #',
         'UPC/EAN (GTIN)',
         'FNSKU',
         'Quantity',
