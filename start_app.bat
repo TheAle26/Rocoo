@@ -27,7 +27,7 @@ IF NOT EXIST "venv\" (
     echo Activating environment...
     call venv\Scripts\activate.bat
 )
-
+git pull origin main
 echo.
 echo Launching Production Server...
 echo Please DO NOT close this black window. To stop the app, click "Shut Down" in the browser.
