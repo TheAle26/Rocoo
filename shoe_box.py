@@ -127,6 +127,9 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         
     except Exception as e:
         print(f"❌ Error generating picture: {e}")
+        # Re-raise so print_label does NOT send a stale current_label.png
+        # (left over from a previous product) to the printer.
+        raise
         
 # def find_fnsku_in_pdf(FNSKU, pdf_path):
 #     """

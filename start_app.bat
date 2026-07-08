@@ -29,14 +29,18 @@ IF NOT EXIST "venv\" (
 )
 git pull origin main
 echo.
+echo Updating dependencies...
+pip install -r requirements.txt --quiet
+echo.
 echo Launching Production Server...
 echo Please DO NOT close this black window. To stop the app, click "Shut Down" in the browser.
 echo.
 
 :: Automatically open the default web browser to the app
+:: (must run BEFORE waitress-serve, which blocks until the server stops)
 start http://127.0.0.1:5000
 
-:: --- NEW: Run the app using Waitress instead of the Flask dev server ---
+:: --- Run the app using Waitress instead of the Flask dev server ---
 waitress-serve --port=5000 app:app
 
 pause

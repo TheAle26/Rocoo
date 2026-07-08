@@ -3,7 +3,7 @@ import os
 import concurrent.futures
 import pandas as pd
 from shoe_box import print_label, map_all_labels_in_pdf
-from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict 
+from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict, normalize_upc
 import signal
 from printer import print_amazon_label
 
@@ -107,7 +107,8 @@ def processing_page():
 @app.route('/scan', methods=['POST'])
 def scan_barcode():
     data = request.get_json()
-    barcode = data.get('barcode', '').strip()
+    # Normalized so the gun can send 12-digit UPC-A or 13-digit EAN-13
+    barcode = normalize_upc(data.get('barcode', ''))
 
     if not barcode:
         return jsonify({"status": "error", "message": "Empty code"}), 400
@@ -201,7 +202,8 @@ def mark_done():
 
     if row_index is None or upc is None:
         return jsonify({"status": "error", "message": "Missing data."}), 400
-        
+
+    upc = normalize_upc(upc)
     row_index = int(row_index)
     global df_memory, master_upc_map
     
