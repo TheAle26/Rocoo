@@ -127,10 +127,7 @@
         {% endblock %}
     </main>
 </div>
-
-{% block scripts %}
 <script>
-    // Helper to show file names and validate extensions, now with rich UI elements
 
     async function shutdownApp() {
         if(confirm("Are you sure you want to shut down the Shipping Tool?")) {
@@ -149,6 +146,12 @@
             }
         }
     }
+
+</script>
+{% block scripts %}
+<script>
+    // Helper to show file names and validate extensions, now with rich UI elements
+
     function showFileName(inputEl, outElId, allowedExtRegex) {
         const out = document.getElementById(outElId);
         const file = inputEl.files[0];
