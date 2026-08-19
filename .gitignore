@@ -13,5 +13,6 @@ current_big_box_label.png
 # and fill in the names from that PC's Windows printer list.
 printers.json
 
-# Machine-local tool permissions.
-.claude/settings.local.json
+# Local agent definitions and tool settings. Each machine keeps its own.
+.claude/
+.codex/
