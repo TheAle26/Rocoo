@@ -3,7 +3,12 @@ import os
 import concurrent.futures
 import pandas as pd
 from shoe_box import print_label, map_all_labels_in_pdf
-from search_cvs import build_master_upc_dict, build_amazon_label_to_page_dict, normalize_upc
+from search_cvs import (
+    build_lookup_index,
+    build_amazon_label_to_page_dict,
+    resolve_query,
+    MAX_CHOICES,
+)
 import signal
 from printer import print_amazon_label
 
@@ -18,10 +23,10 @@ def too_large(e):
     return render_template('index.html', error="Upload too large. The total upload must be under 50 MB."), 413
 
 # Global Variables for our Memory Hash Maps
-df_memory = None  
+df_memory = None
 label_map = None          # Shoe box map {FNSKU: Product Name}
 bix_box_map = None        # Big box map {Amazon Label: Page Number}
-master_upc_map = None     # Master CSV map {UPC: [List of Master Boxes]}
+lookup_index = None       # Shipment index: see search_cvs.build_lookup_index
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_FOLDER = os.path.join(BASE_DIR, 'output')
@@ -38,20 +43,20 @@ def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
     """
     Runs all 3 parsers at the exact same time using 3 background threads.
     """
-    global label_map, bix_box_map, master_upc_map
+    global label_map, bix_box_map, lookup_index
     print("Starting parallel processing (Shoe PDF, Box PDF, and CSV Map)...")
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # 1. Dispatch all three tasks
         future_shoes = executor.submit(map_all_labels_in_pdf, small_label_path)
         future_boxes = executor.submit(build_amazon_label_to_page_dict, bix_box_path, memory_df)
-        future_master = executor.submit(build_master_upc_dict, memory_df)
-        
+        future_master = executor.submit(build_lookup_index, memory_df)
+
         # 2. Wait and grab results
         label_map = future_shoes.result()
         bix_box_map = future_boxes.result()
-        master_upc_map = future_master.result()
-        
+        lookup_index = future_master.result()
+
     print("✅ All data successfully processed and loaded into memory!")
 
 
@@ -109,31 +114,52 @@ def processing_page():
     return render_template('processing.html')
 
 
-# --- NEW: SCAN ROUTE (Just returns the list of boxes) ---
+def public_box(box):
+    """Strips the internal search blob before a box goes over the wire."""
+    return {k: v for k, v in box.items() if not k.startswith('_')}
+
+
+# --- SCAN ROUTE ---
+# Handles the barcode gun and anything a worker types by hand: a partial UPC,
+# a Master Box #, an FNSKU, or a style plus size. See search_cvs.resolve_query.
 @app.route('/scan', methods=['POST'])
 def scan_barcode():
-    data = request.get_json()
-    # Normalized so the gun can send 12-digit UPC-A or 13-digit EAN-13
-    barcode = normalize_upc(data.get('barcode', ''))
+    data = request.get_json(silent=True) or {}
+    query = str(data.get('barcode', '')).strip()
 
-    if not barcode:
+    if not query:
         return jsonify({"status": "error", "message": "Empty code"}), 400
 
-    global master_upc_map
-    if master_upc_map is None:
+    global lookup_index
+    if lookup_index is None:
         return jsonify({"status": "error", "message": "CSV data is not in memory"}), 400
-    
-    boxes_list = master_upc_map.get(barcode)
-    
-    if not boxes_list:
-        return jsonify({"status": "error", "message": f"UPC {barcode} not found."}), 404
-    
-    # Return the list to the frontend to display the Master Boxes
+
+    kind, payload = resolve_query(query, lookup_index)
+
+    if kind == 'boxes':
+        upcs = {b['UPC'] for b in payload}
+        return jsonify({
+            "status": "success",
+            "query": query,
+            # Kept for the plain barcode case, where every box shares one UPC.
+            "UPC": upcs.pop() if len(upcs) == 1 else None,
+            "boxes": [public_box(b) for b in payload],
+        })
+
+    if kind == 'choices':
+        return jsonify({
+            "status": "choose",
+            "query": query,
+            "choices": payload[:MAX_CHOICES],
+            "total": len(payload),
+        })
+
     return jsonify({
-        "status": "success",
-        "UPC": barcode,
-        "boxes": boxes_list
-    })
+        "status": "error",
+        "message": f"No match for '{query}'.",
+        "suggestions": payload[:MAX_CHOICES],
+        "total": len(payload),
+    }), 404
 
 
 # --- ROUTE 1: PRINT SHOES ONLY (Stateless) ---
@@ -202,18 +228,16 @@ def print_big_box():
 # --- ROUTE 3: MARK DONE ONLY (Needs row_index to update CSV) ---
 @app.route('/mark_done', methods=['POST'])
 def mark_done():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     row_index = data.get('row_index')
-    upc = data.get('upc')
 
-    if row_index is None or upc is None:
+    if row_index is None:
         return jsonify({"status": "error", "message": "Missing data."}), 400
 
-    global df_memory, master_upc_map
-    if df_memory is None or master_upc_map is None:
+    global df_memory, lookup_index
+    if df_memory is None or lookup_index is None:
         return jsonify({"status": "error", "message": "Session data not loaded."}), 400
 
-    upc = normalize_upc(upc)
     try:
         row_index = int(row_index)
     except (TypeError, ValueError):
@@ -226,13 +250,14 @@ def mark_done():
     path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
     df_memory.to_csv(path_csv, index=False)
 
-    if upc in master_upc_map:
-        for box in master_upc_map[upc]:
-            if box['Row_Index'] == row_index:
-                box['DONE'] = 'True'
-                break
+    # Keyed on the row rather than the UPC, so this works no matter which way
+    # the worker found the box. Every index shares the same dict, so this one
+    # assignment is visible through all of them.
+    box = lookup_index['by_row'].get(row_index)
+    if box is not None:
+        box['DONE'] = 'True'
 
-    return jsonify({"status": "success", "message": f"Box marked DONE."})
+    return jsonify({"status": "success", "message": "Box marked DONE."})
     
 @app.route('/download_csv')
 def download_csv():
