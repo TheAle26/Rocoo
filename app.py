@@ -38,6 +38,87 @@ CSV_FILENAME = 'actual_shipment.csv'
 BIG_BOX_PDF_FILENAME = 'box_labels_actual_shipment.pdf'
 SMALL_BOX_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
 
+# Uploads land here first. Nothing touches the live session until the worker
+# has been told what replacing it would throw away.
+PENDING_FOLDER = os.path.join(OUTPUT_FOLDER, '_pending')
+
+# The staged upload waiting for confirmation:
+# {'df': DataFrame, 'big': path, 'small': path, 'name': original filename}
+pending_upload = None
+
+
+def session_path(filename):
+    return os.path.join(OUTPUT_FOLDER, filename)
+
+
+def saved_session_exists():
+    """True when output/ holds a complete session that can be resumed."""
+    return all(
+        os.path.exists(session_path(f))
+        for f in (CSV_FILENAME, BIG_BOX_PDF_FILENAME, SMALL_BOX_PDF_FILENAME)
+    )
+
+
+def session_progress():
+    """(done, total) for the session on disk; (0, 0) when there isn't one."""
+    try:
+        df = pd.read_csv(session_path(CSV_FILENAME), dtype=str)
+    except Exception:
+        return 0, 0
+    if 'DONE' not in df.columns:
+        return 0, len(df)
+    done = (df['DONE'].astype(str).str.strip().str.lower() == 'true').sum()
+    return int(done), len(df)
+
+
+def normalize_shipment(df):
+    """Adds the DONE column on a fresh upload and tidies the headers."""
+    df.columns = df.columns.str.strip()
+    if 'DONE' not in df.columns:
+        df['DONE'] = 'False'
+    return df
+
+
+def activate_session(df):
+    """Writes the shipment to disk and builds every in-memory index from it."""
+    global df_memory
+    df_memory = normalize_shipment(df)
+    df_memory.to_csv(session_path(CSV_FILENAME), index=False)
+    process_pdfs_concurrently(
+        session_path(SMALL_BOX_PDF_FILENAME),
+        session_path(BIG_BOX_PDF_FILENAME),
+        df_memory,
+    )
+
+
+def discard_pending():
+    """Throws away a staged upload the worker decided not to apply."""
+    global pending_upload
+    if pending_upload:
+        for key in ('big', 'small'):
+            try:
+                os.remove(pending_upload[key])
+            except OSError:
+                pass
+    pending_upload = None
+
+
+def load_saved_session():
+    """
+    Restores whatever session is sitting in output/ so that a restart - a
+    crash, a Windows update, someone closing the window - resumes where the
+    worker left off instead of tempting them to re-upload and lose the lot.
+    """
+    if not saved_session_exists():
+        return False
+    try:
+        print("🔄 Restoring the previous session from output/ ...")
+        activate_session(pd.read_csv(session_path(CSV_FILENAME), dtype=str))
+        return True
+    except Exception as e:
+        print(f"❌ Could not restore the previous session: {e}")
+        return False
+
 
 def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
     """
@@ -62,56 +143,119 @@ def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    global df_memory, pending_upload
+
     if request.method == 'POST':
         mode = request.form.get('mode')
-        global df_memory
-        path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
 
+        # --- Resume the session already on disk ---
         if mode == 'scan':
-            if not all(os.path.exists(os.path.join(OUTPUT_FOLDER, f)) for f in [CSV_FILENAME, BIG_BOX_PDF_FILENAME, SMALL_BOX_PDF_FILENAME]):
+            if not saved_session_exists():
                 return render_template('index.html', error="No previous session found.")
-            df_memory = pd.read_csv(path_csv, dtype=str)
+            try:
+                activate_session(pd.read_csv(session_path(CSV_FILENAME), dtype=str))
+            except Exception as e:
+                return render_template('index.html', error=f"Could not open the previous session: {e}")
+            return redirect(url_for('processing_page'))
 
-        else:   
-            shipment = request.files.get('shipment')
-            big_box_label_pdf = request.files.get('big_box_label_pdf') 
-            small_box_label_pdf = request.files.get('small_box_label_pdf') 
+        # --- Apply an upload the worker confirmed replacing the session with ---
+        if mode == 'confirm_replace':
+            if not pending_upload:
+                return render_template('index.html', error="That upload expired. Please choose the files again.")
+            staged = pending_upload
+            pending_upload = None
+            try:
+                os.replace(staged['big'], session_path(BIG_BOX_PDF_FILENAME))
+                os.replace(staged['small'], session_path(SMALL_BOX_PDF_FILENAME))
+                activate_session(staged['df'])
+            except Exception as e:
+                return render_template('index.html', error=f"Error processing files: {e}")
+            return redirect(url_for('processing_page'))
 
-            if shipment and big_box_label_pdf and small_box_label_pdf:
-                try:
-                    shipment.save(path_csv)
-                    big_box_label_pdf.save(os.path.join(OUTPUT_FOLDER, BIG_BOX_PDF_FILENAME))
-                    small_box_label_pdf.save(os.path.join(OUTPUT_FOLDER, SMALL_BOX_PDF_FILENAME))
+        if mode == 'cancel_replace':
+            discard_pending()
+            return redirect(url_for('processing_page') if saved_session_exists() else url_for('new_shipment'))
 
-                    if shipment.filename.endswith('.xlsx'):
-                        df_memory = pd.read_excel(path_csv, dtype=str)
-                    else:
-                        df_memory = pd.read_csv(path_csv, dtype=str)
-                except Exception as e:
-                    return render_template('index.html', error=f"Error processing files: {str(e)}")
+        # --- A fresh upload ---
+        shipment = request.files.get('shipment')
+        big_box_label_pdf = request.files.get('big_box_label_pdf')
+        small_box_label_pdf = request.files.get('small_box_label_pdf')
+
+        if not (shipment and big_box_label_pdf and small_box_label_pdf):
+            return render_template('index.html', error="Please provide all valid files.")
+
+        # Staged, never written over the live session yet. Overwriting first and
+        # asking later is what used to wipe every DONE row without warning.
+        discard_pending()
+        os.makedirs(PENDING_FOLDER, exist_ok=True)
+        try:
+            raw_csv = os.path.join(PENDING_FOLDER, 'shipment_upload')
+            staged_big = os.path.join(PENDING_FOLDER, BIG_BOX_PDF_FILENAME)
+            staged_small = os.path.join(PENDING_FOLDER, SMALL_BOX_PDF_FILENAME)
+
+            shipment.save(raw_csv)
+            big_box_label_pdf.save(staged_big)
+            small_box_label_pdf.save(staged_small)
+
+            if (shipment.filename or '').lower().endswith('.xlsx'):
+                new_df = pd.read_excel(raw_csv, dtype=str)
             else:
-                return render_template('index.html', error="Please provide all valid files.")
+                new_df = pd.read_csv(raw_csv, dtype=str)
+            os.remove(raw_csv)
+        except Exception as e:
+            discard_pending()
+            return render_template('index.html', error=f"Error processing files: {e}")
 
-        if 'DONE' not in df_memory.columns:
-            df_memory['DONE'] = 'False'   
-        df_memory.columns = df_memory.columns.str.strip()
-        df_memory.to_csv(path_csv, index=False)  
-              
-        # Launch the background builders
-        process_pdfs_concurrently(
-            os.path.join(OUTPUT_FOLDER, SMALL_BOX_PDF_FILENAME), 
-            os.path.join(OUTPUT_FOLDER, BIG_BOX_PDF_FILENAME), 
-            df_memory
-        )
-                
+        done, total = session_progress()
+        if saved_session_exists() and done > 0:
+            pending_upload = {
+                'df': new_df,
+                'big': staged_big,
+                'small': staged_small,
+                'name': shipment.filename,
+            }
+            return render_template(
+                'index.html',
+                confirm_replace={
+                    'done': done,
+                    'total': total,
+                    'filename': shipment.filename,
+                    'new_rows': len(new_df),
+                },
+            )
+
+        try:
+            os.replace(staged_big, session_path(BIG_BOX_PDF_FILENAME))
+            os.replace(staged_small, session_path(SMALL_BOX_PDF_FILENAME))
+            activate_session(new_df)
+        except Exception as e:
+            return render_template('index.html', error=f"Error processing files: {e}")
+
         return redirect(url_for('processing_page'))
 
-    return render_template('index.html')
+    # A restored session should not sit behind an upload form the worker has to
+    # get past - going straight back to scanning is the whole point of resuming.
+    if lookup_index is not None:
+        return redirect(url_for('processing_page'))
+
+    return render_template('index.html', has_saved_session=saved_session_exists())
+
+
+@app.route('/new')
+def new_shipment():
+    """The upload form, reachable even while a session is loaded."""
+    return render_template('index.html', has_saved_session=saved_session_exists())
 
 
 @app.route('/processing')
 def processing_page():
-    return render_template('processing.html')
+    # Without the indexes every scan fails with "CSV data is not in memory",
+    # which tells the worker nothing about what to do next.
+    if lookup_index is None:
+        return redirect(url_for('new_shipment'))
+
+    done, total = session_progress()
+    return render_template('processing.html', done=done, total=total)
 
 
 def public_box(box):
@@ -173,7 +317,9 @@ def print_shoes():
         return jsonify({"status": "error", "message": "Missing FNSKU or quantity."}), 400
         
     global label_map
-    
+    if label_map is None:
+        return jsonify({"status": "error", "message": "Session data not loaded."}), 400
+
     # We still use label_map to find the name, but we don't need the CSV memory anymore!
     product_name = label_map.get(fnsku, "Unknown Product")
     
@@ -203,7 +349,9 @@ def print_big_box():
         return jsonify({"status": "error", "message": "Missing Amazon Label."}), 400
         
     global bix_box_map
-    
+    if bix_box_map is None:
+        return jsonify({"status": "error", "message": "Session data not loaded."}), 400
+
     # Translate the label to a page number using our O(1) dictionary
     big_box_page_num = bix_box_map.get(amazon_label)
     
@@ -309,6 +457,11 @@ def shutdown():
     # Sends a termination signal to the current process
     os.kill(os.getpid(), signal.SIGTERM)
     return jsonify({"status": "success", "message": "Server is shutting down. You can close this window."})
+
+# Runs at import, so it covers waitress-serve as well as the line below.
+# Parsing the whole shipment takes under two seconds, so there is nothing to
+# gain from doing this lazily or showing a loading screen.
+load_saved_session()
 
 if __name__ == '__main__':
     app.run(debug=False)
