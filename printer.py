@@ -8,6 +8,13 @@ import fitz  # This is PyMuPDF
 
 
 
+# GetDeviceCaps indices from wingdi.h: the size of the printable area in
+# device units. A printer DC's origin is already the top-left of that area,
+# so nothing needs to be offset by the physical margin.
+HORZRES = 8
+VERTRES = 10
+
+
 class PrinterConfigError(RuntimeError):
     """Raised when printers.json is missing or does not name a real printer."""
 
@@ -63,6 +70,30 @@ def resolve_printer_name(printer_type):
 
     return printer_name
 
+def fit_rect(image_size, printable_size):
+    """
+    Largest rectangle keeping the label's proportions inside the printable
+    area, centred.
+
+    Drawing straight to (0, 0, HORZRES, VERTRES) stretches the label to the
+    shape of whatever media is loaded, and stretches the barcode with it. A
+    barcode read by a scanner has to keep its bar widths in proportion.
+    """
+    img_w, img_h = image_size
+    area_w, area_h = printable_size
+
+    if img_w <= 0 or img_h <= 0 or area_w <= 0 or area_h <= 0:
+        return (0, 0, area_w, area_h)
+
+    scale = min(area_w / img_w, area_h / img_h)
+    draw_w = max(1, int(img_w * scale))
+    draw_h = max(1, int(img_h * scale))
+    left = (area_w - draw_w) // 2
+    top = (area_h - draw_h) // 2
+
+    return (left, top, left + draw_w, top + draw_h)
+
+
 def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
     """
     Silently sends a saved image directly to a specific Windows printer based on its type.
@@ -82,14 +113,15 @@ def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
             hDC = win32ui.CreateDC()
             hDC.CreatePrinterDC(printer_name)
             
-            printable_area = hDC.GetDeviceCaps(8), hDC.GetDeviceCaps(10)
-            
+            printable_area = hDC.GetDeviceCaps(HORZRES), hDC.GetDeviceCaps(VERTRES)
+            target = fit_rect(img.size, printable_area)
+
             hDC.StartDoc(image_path)
             hDC.StartPage()
-            
+
             dib = ImageWin.Dib(img)
-            dib.draw(hDC.GetHandleOutput(), (0, 0, printable_area[0], printable_area[1]))
-            
+            dib.draw(hDC.GetHandleOutput(), target)
+
             hDC.EndPage()
             hDC.EndDoc()
             hDC.DeleteDC()
