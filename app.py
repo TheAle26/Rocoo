@@ -336,9 +336,6 @@ def print_shoes():
         return jsonify({"status": "error", "message": f"Shoe printer error: {str(e)}"}), 500
 
 
-# Make sure to import your new function at the top of app.py!
-# from big_box import print_amazon_label 
-
 # --- ROUTE 2: PRINT BIG BOX ONLY (Stateless) ---
 @app.route('/print_big_box', methods=['POST'])
 def print_big_box():
@@ -425,9 +422,10 @@ def download_csv():
 def view_data():
     global df_memory
     
-    # If there is no active session, redirect back to home
+    # If there is no active session, send them to the upload form. Going to /
+    # would just bounce back here once a session is loaded.
     if df_memory is None:
-        return redirect(url_for('index'))
+        return redirect(url_for('new_shipment'))
 
     # Define EXACTLY which columns you want to display to the user
     columns_to_show = [
@@ -443,10 +441,19 @@ def view_data():
     available_cols = [col for col in columns_to_show if col in df_memory.columns]
     df_subset = df_memory[available_cols]
 
+    # Drop the trailing totals row, which carries a Quantity but no UPC and so
+    # rendered as a blank line. The scanner already skips it for the same reason.
+    if 'UPC/EAN (GTIN)' in df_subset.columns:
+        df_subset = df_subset[df_subset['UPC/EAN (GTIN)'].notna()]
+
     # Convert the dataframe to a list of dictionaries so Jinja/HTML can easily read it
     table_data = df_subset.to_dict(orient='records')
 
-    return render_template('view_data.html', table_data=table_data, columns=available_cols)
+    done, total = session_progress()
+    return render_template(
+        'view_data.html', table_data=table_data, columns=available_cols,
+        done=done, total=total,
+    )
 
 
 
