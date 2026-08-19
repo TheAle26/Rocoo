@@ -10,6 +10,12 @@ from printer import print_amazon_label
 
 
 app = Flask(__name__, static_folder='static')
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB cap on uploads
+
+
+@app.errorhandler(413)
+def too_large(e):
+    return render_template('index.html', error="Upload too large. The total upload must be under 50 MB."), 413
 
 # Global Variables for our Memory Hash Maps
 df_memory = None  
@@ -203,19 +209,29 @@ def mark_done():
     if row_index is None or upc is None:
         return jsonify({"status": "error", "message": "Missing data."}), 400
 
-    upc = normalize_upc(upc)
-    row_index = int(row_index)
     global df_memory, master_upc_map
-    
+    if df_memory is None or master_upc_map is None:
+        return jsonify({"status": "error", "message": "Session data not loaded."}), 400
+
+    upc = normalize_upc(upc)
+    try:
+        row_index = int(row_index)
+    except (TypeError, ValueError):
+        return jsonify({"status": "error", "message": "Invalid row index."}), 400
+
+    if row_index not in df_memory.index:
+        return jsonify({"status": "error", "message": "Invalid row index."}), 404
+
     df_memory.at[row_index, 'DONE'] = 'True'
     path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
     df_memory.to_csv(path_csv, index=False)
-    
-    for box in master_upc_map[upc]:
-        if box['Row_Index'] == row_index:
-            box['DONE'] = 'True'
-            break
-            
+
+    if upc in master_upc_map:
+        for box in master_upc_map[upc]:
+            if box['Row_Index'] == row_index:
+                box['DONE'] = 'True'
+                break
+
     return jsonify({"status": "success", "message": f"Box marked DONE."})
     
 @app.route('/download_csv')

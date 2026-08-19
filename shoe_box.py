@@ -18,7 +18,11 @@ def print_label(FNSKU, quantity, product_name):
         print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
         #zebra_printer(FNSKU, product_name,quantity)
         filename = f"{output_filename}.png"
-        print_image_to_printer(filename, quantity, printer_type="shoe_printer")
+        success = print_image_to_printer(filename, quantity, printer_type="shoe_printer")
+        if not success:
+            raise RuntimeError("Windows Spooler failed to print the shoe label.")
+
+        return True
 
     else:
         print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
@@ -151,11 +155,9 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
 #                     product_name = match.group(1).replace('\n', ' ').strip()
 #                     print(f"✅ Found '{FNSKU}' -> {product_name}")
 #                     return product_name
-                    
+
 #         print(f"❌ FNSKU '{FNSKU}' not found in the PDF.")
 #         return None
-        
 #     except FileNotFoundError:
 #         print(f"Error: The file '{pdf_path}' was not found.")
 #         return None
-    

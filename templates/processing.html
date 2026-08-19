@@ -61,6 +61,17 @@
     const inputScanner = document.getElementById('scanner-input');
     const resultLog = document.getElementById('result-log');
 
+    // Spreadsheet values are untrusted input. Escape them before adding them
+    // to an HTML template, including values stored in data-* attributes.
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
     // Keeps focus on the scanner input
     document.addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')) {
@@ -69,13 +80,17 @@
     });
 
     // Listen for scanner input
-    inputScanner.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const barcode = inputScanner.value.trim();
-            inputScanner.value = ''; 
-            if (barcode) { enviarCodigoAlBackend(barcode); }
+    inputScanner.addEventListener('keydown', function(e) {
+        // USB barcode pistols normally behave like keyboards and finish a
+        // scan with either Enter/CR or Tab, depending on their configuration.
+        if (e.key !== 'Enter' && e.key !== 'Tab') {
+            return;
         }
+
+        e.preventDefault();
+        const barcode = inputScanner.value.trim();
+        inputScanner.value = '';
+        if (barcode) { enviarCodigoAlBackend(barcode); }
     });
 
     // --- NEW: AUTO-DISMISSING NOTIFICATION SYSTEM ---
@@ -93,7 +108,10 @@
         toast.style.zIndex = '9999'; // Ensure it stays on top of everything
         toast.style.transition = 'opacity 0.5s ease'; // Smooth fade out
         
-        toast.innerHTML = `<i class="bi ${icon} me-2"></i> ${message}`;
+        const iconElement = document.createElement('i');
+        iconElement.className = `bi ${icon} me-2`;
+        toast.appendChild(iconElement);
+        toast.appendChild(document.createTextNode(String(message)));
         
         // Add it to the screen
         document.body.appendChild(toast);
@@ -109,7 +127,7 @@
     // 1. SCAN BARCODE AND GENERATE THE 3-BUTTON UI
     async function enviarCodigoAlBackend(barcode) {
         try {
-            resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${barcode}</div>`;
+            resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${escapeHtml(barcode)}</div>`;
             
             const response = await fetch('/scan', {
                 method: 'POST',
@@ -128,33 +146,39 @@
                 `;
                 
                 data.boxes.forEach(box => {
-                    const isDone = box.DONE.toLowerCase() === 'true';
+                    const isDone = String(box.DONE).toLowerCase() === 'true';
                     const doneDisabledStr = isDone ? 'disabled' : '';
                     const bgClass = isDone ? 'bg-light opacity-75' : '';
+                    const rowIndex = Number(box.Row_Index);
+                    const quantity = Number(box.Quantity);
+                    const masterBox = escapeHtml(box['Master Box #']);
+                    const amazonLabel = escapeHtml(box['Amazon Labels']);
+                    const fnsku = escapeHtml(box.FNSKU);
+                    const upc = escapeHtml(data.UPC);
                     
                     const doneText = isDone ? '<i class="bi bi-check2-all"></i> Completed' : '<i class="bi bi-check-circle"></i> Mark Done';
                     const doneBtnClass = isDone ? 'btn-outline-secondary' : 'btn-success';
 
                     html += `
-                        <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${box.Row_Index}">
+                        <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${rowIndex}">
                             <div class="mb-3 mb-xl-0 text-start">
-                                <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${box['Master Box #']}</span></h6>
+                                <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${masterBox}</span></h6>
                                 <div class="text-muted small">
-                                    <strong>Qty:</strong> ${box.Quantity} | <strong>Label:</strong> ${box['Amazon Labels']}
+                                    <strong>Qty:</strong> ${quantity} | <strong>Label:</strong> ${amazonLabel}
                                 </div>
                             </div>
                             
                             <div class="btn-group shadow-sm w-100 w-xl-auto">
-                                <button class="btn btn-outline-dark btn-sm fw-bold" 
-                                        onclick="printShoeLabels('${box.FNSKU}', ${box.Quantity})">
-                                    <i class="bi bi-printer"></i> Shoes (${box.Quantity})
+                                <button class="btn btn-outline-dark btn-sm fw-bold print-shoes-btn"
+                                        data-fnsku="${fnsku}" data-quantity="${quantity}">
+                                    <i class="bi bi-printer"></i> Shoes (${quantity})
                                 </button>
-                                <button class="btn btn-outline-primary btn-sm fw-bold" 
-                                        onclick="printBigBoxLabel('${box['Amazon Labels']}')">
+                                <button class="btn btn-outline-primary btn-sm fw-bold print-big-box-btn"
+                                        data-amazon-label="${amazonLabel}">
                                     <i class="bi bi-box-seam"></i> Big Box
                                 </button>
-                                <button id="done-btn-${box.Row_Index}" class="btn ${doneBtnClass} btn-sm fw-bold" ${doneDisabledStr} 
-                                        onclick="markBoxDone('${data.UPC}', ${box.Row_Index})">
+                                <button id="done-btn-${rowIndex}" class="btn ${doneBtnClass} btn-sm fw-bold mark-done-btn" ${doneDisabledStr}
+                                        data-upc="${upc}" data-row-index="${rowIndex}">
                                     ${doneText}
                                 </button>
                             </div>
@@ -166,12 +190,33 @@
                 resultLog.innerHTML = html;
 
             } else {
-                resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3"><strong>Error:</strong> ${data.message}</div>`;
+                resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3"><strong>Error:</strong> ${escapeHtml(data.message)}</div>`;
             }
         } catch (error) {
             resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3">Connection Error</div>`;
         }
     }
+
+    // Keep executable JavaScript out of HTML attributes. Values are read from
+    // the DOM only after the escaped template has been parsed.
+    resultLog.addEventListener('click', function(event) {
+        const shoeButton = event.target.closest('.print-shoes-btn');
+        if (shoeButton) {
+            printShoeLabels(shoeButton.dataset.fnsku, Number(shoeButton.dataset.quantity));
+            return;
+        }
+
+        const bigBoxButton = event.target.closest('.print-big-box-btn');
+        if (bigBoxButton) {
+            printBigBoxLabel(bigBoxButton.dataset.amazonLabel);
+            return;
+        }
+
+        const doneButton = event.target.closest('.mark-done-btn');
+        if (doneButton) {
+            markBoxDone(doneButton.dataset.upc, Number(doneButton.dataset.rowIndex));
+        }
+    });
 
     // 2. ACTION: PRINT SHOES
     async function printShoeLabels(fnsku, quantity) {
