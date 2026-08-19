@@ -3,5 +3,15 @@
 __pycache__/
 *.pyc
 output/
+
+# Scratch label images. These are rewritten on every print, so tracking
+# them makes `git pull` fail on any PC that has printed even once.
 current_label.png
-git
+current_big_box_label.png
+
+# Per-machine printer names. Copy printers.example.json to printers.json
+# and fill in the names from that PC's Windows printer list.
+printers.json
+
+# Machine-local tool permissions.
+.claude/settings.local.json

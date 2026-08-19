@@ -8,34 +8,71 @@ import fitz  # This is PyMuPDF
 
 
 
+class PrinterConfigError(RuntimeError):
+    """Raised when printers.json is missing or does not name a real printer."""
+
+
+# Text carried by the untouched entries in printers.example.json.
+PLACEHOLDER_MARKER = "PUT THE EXACT WINDOWS NAME"
+
+
 def get_printer_names():
     """Reads the exact printer names from the JSON file."""
     base_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(base_dir, 'printers.json')
-    
+
     try:
         with open(config_path, 'r') as f:
             return json.load(f)
     except FileNotFoundError:
-        print("⚠️ printers.json not found! Using default Windows printers.")
-        return {"shoe_printer": None, "big_box_printer": None}
+        raise PrinterConfigError(
+            "printers.json is missing on this PC. Copy printers.example.json to "
+            "printers.json and fill in the two printer names."
+        )
+    except json.JSONDecodeError as e:
+        raise PrinterConfigError(f"printers.json is not valid JSON ({e}).")
+
+
+def resolve_printer_name(printer_type):
+    """
+    Returns the Windows printer name configured for 'shoe_printer' or
+    'big_box_printer'.
+
+    A missing or placeholder entry is a hard error. Falling back to the Windows
+    default printer would send labels to whatever device happens to be default,
+    which is worse than not printing at all.
+    """
+    printer_name = get_printer_names().get(printer_type)
+
+    if not printer_name or PLACEHOLDER_MARKER in printer_name:
+        raise PrinterConfigError(
+            f"printers.json does not name a printer for '{printer_type}'. "
+            "Fill it in with the exact name from the Windows printer list."
+        )
+
+    installed = {
+        p[2] for p in win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+        )
+    }
+    if printer_name not in installed:
+        raise PrinterConfigError(
+            f"'{printer_name}' (configured as {printer_type}) is not installed on "
+            f"this PC. Installed printers: {', '.join(sorted(installed)) or 'none'}."
+        )
+
+    return printer_name
 
 def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
     """
     Silently sends a saved image directly to a specific Windows printer based on its type.
     """
-    # 1. Load the printer names from the config file
-    config = get_printer_names()
-    printer_name = config.get(printer_type)
-    
+    # 1. Resolve the printer before the try block, so a configuration problem
+    # reaches the UI as a clear message instead of being flattened into "False".
+    printer_name = resolve_printer_name(printer_type)
+    print(f"🖨️ Connecting to {printer_type}: '{printer_name}'")
+
     try:
-        # 2. Use the specific printer, or fallback to Default if none is found
-        if not printer_name:
-            printer_name = win32print.GetDefaultPrinter()
-            print(f"No printer specified for {printer_type}. Falling back to default: {printer_name}")
-        else:
-            print(f"🖨️ Connecting to {printer_type}: '{printer_name}'")
-        
         # 3. Open the PNG label you generated
         img = Image.open(image_path)
         img = img.convert('L') # Pure black & white
