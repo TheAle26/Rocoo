@@ -373,6 +373,16 @@ def print_big_box():
 # --- ROUTE 3: MARK DONE ONLY (Needs row_index to update CSV) ---
 @app.route('/mark_done', methods=['POST'])
 def mark_done():
+    return set_row_done('True', "Box marked DONE.")
+
+
+# Undoes a Mark Done made by mistake. Same checks as /mark_done.
+@app.route('/unmark_done', methods=['POST'])
+def unmark_done():
+    return set_row_done('False', "Box unmarked.")
+
+
+def set_row_done(value, message):
     data = request.get_json(silent=True) or {}
     row_index = data.get('row_index')
 
@@ -391,7 +401,7 @@ def mark_done():
     if row_index not in df_memory.index:
         return jsonify({"status": "error", "message": "Invalid row index."}), 404
 
-    df_memory.at[row_index, 'DONE'] = 'True'
+    df_memory.at[row_index, 'DONE'] = value
     path_csv = os.path.join(OUTPUT_FOLDER, CSV_FILENAME)
     df_memory.to_csv(path_csv, index=False)
 
@@ -400,9 +410,9 @@ def mark_done():
     # assignment is visible through all of them.
     box = lookup_index['by_row'].get(row_index)
     if box is not None:
-        box['DONE'] = 'True'
+        box['DONE'] = value
 
-    return jsonify({"status": "success", "message": "Box marked DONE."})
+    return jsonify({"status": "success", "message": message})
     
 @app.route('/download_csv')
 def download_csv():
