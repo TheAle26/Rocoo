@@ -109,10 +109,10 @@
     });
 
     // Keeps the header count honest without a page reload.
-    function bumpProgress() {
+    function bumpProgress(delta = 1) {
         const badge = document.getElementById('progress-badge');
         if (!badge) { return; }
-        const done = Number(badge.dataset.done) + 1;
+        const done = Number(badge.dataset.done) + delta;
         const total = Number(badge.dataset.total);
         badge.dataset.done = done;
         badge.innerHTML = `<i class="bi bi-check2-square me-1"></i>${done} of ${total} done`;
@@ -185,7 +185,6 @@
 
         data.boxes.forEach(box => {
             const isDone = String(box.DONE).toLowerCase() === 'true';
-            const doneDisabledStr = isDone ? 'disabled' : '';
             const bgClass = isDone ? 'bg-light opacity-75' : '';
             const rowIndex = Number(box.Row_Index);
             const quantity = Number(box.Quantity);
@@ -198,13 +197,12 @@
                 [box['Style Name'], box['Size'], box['Color Code']].filter(Boolean).join(' · ')
             );
 
-            const doneText = isDone ? '<i class="bi bi-check2-all"></i> Completed' : '<i class="bi bi-check-circle"></i> Mark Done';
-            const doneBtnClass = isDone ? 'btn-outline-secondary' : 'btn-success';
-
             html += `
                 <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${rowIndex}">
                     <div class="mb-3 mb-xl-0 text-start">
-                        <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${masterBox}</span></h6>
+                        <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary box-name">${masterBox}</span>
+                            <span id="done-badge-${rowIndex}" class="badge bg-success ms-2 ${isDone ? '' : 'd-none'}"><i class="bi bi-check2-all"></i> Completed</span>
+                        </h6>
                         <div class="text-dark small">${descr}</div>
                         <div class="text-muted small">
                             <strong>Qty:</strong> ${quantity} | <strong>Label:</strong> ${amazonLabel}
@@ -220,9 +218,8 @@
                                 data-amazon-label="${amazonLabel}">
                             <i class="bi bi-box-seam"></i> Big Box
                         </button>
-                        <button id="done-btn-${rowIndex}" class="btn ${doneBtnClass} btn-sm fw-bold mark-done-btn" ${doneDisabledStr}
+                        <button id="done-btn-${rowIndex}" class="btn btn-sm fw-bold mark-done-btn"
                                 data-row-index="${rowIndex}">
-                            ${doneText}
                         </button>
                     </div>
                 </div>
@@ -231,6 +228,7 @@
 
         html += `</div>`;
         resultLog.innerHTML = html;
+        data.boxes.forEach(box => setDoneState(Number(box.Row_Index), String(box.DONE).toLowerCase() === 'true'));
     }
 
     // Several products matched. Picking one re-runs the lookup with its exact
@@ -312,7 +310,7 @@
 
         const doneButton = event.target.closest('.mark-done-btn');
         if (doneButton) {
-            markBoxDone(Number(doneButton.dataset.rowIndex));
+            toggleBoxDone(Number(doneButton.dataset.rowIndex));
             return;
         }
 
@@ -365,27 +363,96 @@
         inputScanner.focus();
     }
 
-    // 4. ACTION: MARK DONE
-    async function markBoxDone(rowIndex) {
+    // 4. ACTION: MARK DONE / UNMARK
+
+    // Paints one row as done or not done. The button toggles between
+    // "Mark Done" and "Unmark".
+    function setDoneState(rowIndex, isDone) {
+        const rowElement = document.getElementById(`box-row-${rowIndex}`);
+        const doneBtn = document.getElementById(`done-btn-${rowIndex}`);
+        const badge = document.getElementById(`done-badge-${rowIndex}`);
+
+        rowElement.classList.toggle('bg-light', isDone);
+        rowElement.classList.toggle('opacity-75', isDone);
+        badge.classList.toggle('d-none', !isDone);
+
+        doneBtn.dataset.done = isDone ? 'true' : 'false';
+        doneBtn.classList.toggle('btn-success', !isDone);
+        doneBtn.classList.toggle('btn-outline-secondary', isDone);
+        doneBtn.innerHTML = isDone
+            ? '<i class="bi bi-arrow-counterclockwise"></i> Unmark'
+            : '<i class="bi bi-check-circle"></i> Mark Done';
+    }
+
+    // A small confirmation popup. Resolves true on Confirm, false otherwise.
+    // Focus starts on Cancel, so a stray Enter from the barcode scanner while
+    // the popup is open cancels instead of confirming.
+    function confirmDialog(message, confirmLabel, confirmClass) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:10000;' +
+                                    'display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = `
+                <div class="bg-white rounded-3 shadow-lg p-4" style="width:min(420px,90vw);" role="dialog" aria-modal="true">
+                    <h5 class="fw-bold mb-3"><i class="bi bi-question-circle text-primary me-2"></i>Confirm</h5>
+                    <p class="mb-4 confirm-message"></p>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-light border fw-bold confirm-cancel">Cancel</button>
+                        <button type="button" class="btn fw-bold confirm-ok"></button>
+                    </div>
+                </div>`;
+            // Set as text, never as HTML, because it contains spreadsheet data.
+            overlay.querySelector('.confirm-message').textContent = message;
+            const okBtn = overlay.querySelector('.confirm-ok');
+            okBtn.textContent = confirmLabel;
+            okBtn.classList.add(confirmClass);
+
+            const close = (answer) => {
+                document.removeEventListener('keydown', onKey, true);
+                overlay.remove();
+                inputScanner.focus();
+                resolve(answer);
+            };
+            const onKey = (e) => {
+                if (e.key === 'Escape') { e.preventDefault(); close(false); }
+            };
+
+            overlay.addEventListener('click', (e) => {
+                // Keep these clicks away from the page's "refocus the scanner" handler.
+                e.stopPropagation();
+                if (e.target === overlay) { close(false); }
+            });
+            overlay.querySelector('.confirm-cancel').addEventListener('click', () => close(false));
+            okBtn.addEventListener('click', () => close(true));
+            document.addEventListener('keydown', onKey, true);
+
+            document.body.appendChild(overlay);
+            overlay.querySelector('.confirm-cancel').focus();
+        });
+    }
+
+    async function toggleBoxDone(rowIndex) {
+        const doneBtn = document.getElementById(`done-btn-${rowIndex}`);
+        const isDone = doneBtn.dataset.done === 'true';
+        const boxName = document.querySelector(`#box-row-${rowIndex} .box-name`).textContent;
+
+        const confirmed = isDone
+            ? await confirmDialog(`Unmark "${boxName}"? It will go back to NOT done.`, 'Unmark', 'btn-warning')
+            : await confirmDialog(`Mark "${boxName}" as done?`, 'Mark Done', 'btn-success');
+        if (!confirmed) { return; }
+
         try {
-            const response = await fetch('/mark_done', {
+            const response = await fetch(isDone ? '/unmark_done' : '/mark_done', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ row_index: rowIndex })
             });
-            
+
             const data = await response.json();
 
             if (response.ok && data.status === 'success') {
-                const rowElement = document.getElementById(`box-row-${rowIndex}`);
-                rowElement.classList.add('bg-light', 'opacity-75');
-                
-                const doneBtn = document.getElementById(`done-btn-${rowIndex}`);
-                doneBtn.disabled = true;
-                doneBtn.innerHTML = '<i class="bi bi-check2-all"></i> Completed';
-                doneBtn.classList.replace('btn-success', 'btn-outline-secondary');
-
-                bumpProgress();
+                setDoneState(rowIndex, !isDone);
+                bumpProgress(isDone ? -1 : 1);
                 showNotification(data.message, true);
             } else {
                 showNotification(data.message, false);
