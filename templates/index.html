@@ -46,12 +46,66 @@
                 </div>
                 {% endif %}
 
+                {% if confirm_replace %}
+                <div class="card main-card border-warning mb-4">
+                    <div class="card-header-custom d-flex align-items-center bg-warning bg-opacity-10">
+                        <h6 class="mb-0 fw-bold text-dark">
+                            <i class="bi bi-exclamation-triangle-fill me-2 text-warning"></i>This would erase work already done
+                        </h6>
+                    </div>
+                    <div class="card-body p-4">
+                        <p class="mb-3">
+                            The shipment currently open has
+                            <strong>{{ confirm_replace.done }} of {{ confirm_replace.total }}</strong>
+                            boxes already marked as done.
+                        </p>
+                        <p class="mb-4 text-muted">
+                            Loading <strong>{{ confirm_replace.filename }}</strong>
+                            ({{ confirm_replace.new_rows }} rows) starts again from zero, and
+                            those {{ confirm_replace.done }} boxes go back to not done.
+                            Nothing has been replaced yet.
+                        </p>
+                        <p class="mb-4 small text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            To carry on with the shipment already open, choose
+                            <strong>Keep working</strong> &mdash; you do not need to upload anything.
+                        </p>
+
+                        <div class="d-flex flex-column flex-sm-row gap-2">
+                            <form action="/" method="POST" class="m-0">
+                                <input type="hidden" name="mode" value="cancel_replace">
+                                <button type="submit" class="btn btn-success fw-bold px-4">
+                                    <i class="bi bi-arrow-left me-2"></i>Keep working on the current shipment
+                                </button>
+                            </form>
+                            <form action="/" method="POST" class="m-0">
+                                <input type="hidden" name="mode" value="confirm_replace">
+                                <button type="submit" class="btn btn-outline-danger fw-bold px-4">
+                                    <i class="bi bi-trash3 me-2"></i>Erase it and load the new file
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="card main-card">
                     <div class="card-header-custom d-flex justify-content-between align-items-center">
                         <h6 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2 text-primary"></i>New Shipment Process</h6>
                     </div>
-                    
+
                     <div class="card-body p-4">
+
+                        {% if has_saved_session %}
+                        <div class="alert alert-info d-flex align-items-center rounded-3 py-2 mb-3" role="alert">
+                            <i class="bi bi-clock-history me-3 fs-5"></i>
+                            <div class="small">
+                                There is a shipment already in progress. Choose
+                                <strong>Continue Work</strong> to go back to it &mdash;
+                                uploading new files erases it.
+                            </div>
+                        </div>
+                        {% endif %}
 
                         <div class="action-toolbar">
                             <a href="{{ url_for('download_csv') }}" class="tool-btn">
@@ -112,7 +166,7 @@
 
                             <div class="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
                                 <div class="text-muted" style="font-size: 0.8rem;">
-                                    <i class="bi bi-info-circle me-1"></i> Max file size: 10 MB per file
+                                    <i class="bi bi-info-circle me-1"></i> Max total upload size: 50 MB
                                 </div>
                                 <button id="submitBtn" class="btn btn-primary btn-submit shadow-sm">
                                     <i class="bi bi-check2-circle me-2"></i>Upload & Process

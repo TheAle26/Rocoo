@@ -5,10 +5,10 @@
     <div class="col-lg-9 col-xl-8">
         
         <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-            <a href="{{ url_for('index') }}" class="btn btn-light border shadow-sm fw-medium rounded-3 px-3 py-2 text-decoration-none">
-                <i class="bi bi-arrow-left me-2"></i>Back to Home
+            <a href="{{ url_for('new_shipment') }}" class="btn btn-light border shadow-sm fw-medium rounded-3 px-3 py-2 text-decoration-none">
+                <i class="bi bi-upload me-2"></i>Start a new shipment
             </a>
-            
+
             <div class="d-flex flex-column flex-sm-row gap-2">
                 <a href="{{ url_for('view_data') }}" target="_blank" class="btn btn-outline-primary shadow-sm rounded-3 px-3 py-2 fw-medium">
                     <i class="bi bi-box-arrow-up-right me-2"></i>View Data
@@ -23,12 +23,20 @@
         <div class="card main-card">
             <div class="card-header-custom d-flex justify-content-between align-items-center">
                 <h6 class="mb-0 fw-bold"><i class="bi bi-upc-scan me-2 text-primary"></i>Scanner Processing</h6>
-                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-1 rounded-pill">
-                    <span class="spinner-grow spinner-grow-sm me-1" style="width: 0.5rem; height: 0.5rem;" role="status"></span>
-                    Active
-                </span>
+                <div class="d-flex align-items-center gap-2">
+                    {% if total %}
+                    <span id="progress-badge" class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-3 py-1 rounded-pill"
+                          data-done="{{ done }}" data-total="{{ total }}">
+                        <i class="bi bi-check2-square me-1"></i>{{ done }} of {{ total }} done
+                    </span>
+                    {% endif %}
+                    <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-3 py-1 rounded-pill">
+                        <span class="spinner-grow spinner-grow-sm me-1" style="width: 0.5rem; height: 0.5rem;" role="status"></span>
+                        Active
+                    </span>
+                </div>
             </div>
-            
+
             <div class="card-body text-center p-4 p-md-5">
                 
                 <div class="mb-4">
@@ -36,12 +44,19 @@
                     <h4 class="mt-2 fw-bold text-dark">Ready to Scan</h4>
                     <p class="text-muted small">Point your barcode scanner and shoot</p>
                 </div>
-                
+
                 <div class="mx-auto" style="max-width: 600px;">
-                    <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-sm mb-4" 
-                           style="border: 2px solid var(--primary-color, #4f46e5); font-size: 1.5rem; letter-spacing: 2px; border-radius: 12px; background-color: #f8fafc;" 
+                    <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-sm mb-2"
+                           style="border: 2px solid var(--primary-color, #4f46e5); font-size: 1.5rem; letter-spacing: 2px; border-radius: 12px; background-color: #f8fafc;"
                            autofocus autocomplete="off" placeholder="Shoot barcode here...">
-                    
+
+                    <p class="text-muted small mb-4">
+                        <i class="bi bi-keyboard me-1"></i>
+                        Barcode won't scan? Type the <strong>last 5 digits</strong> of the UPC,
+                        or a box number like <code>A410</code>, an FNSKU, or a style like
+                        <code>clifton 09.5</code> &mdash; then press Enter.
+                    </p>
+
                     <div id="result-log" class="text-start">
                         <div class="text-center p-3 text-muted bg-light rounded-3 border border-dashed">
                             <i class="bi bi-clock-history me-2"></i>Waiting for your first scan...
@@ -61,6 +76,17 @@
     const inputScanner = document.getElementById('scanner-input');
     const resultLog = document.getElementById('result-log');
 
+    // Spreadsheet values are untrusted input. Escape them before adding them
+    // to an HTML template, including values stored in data-* attributes.
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
     // Keeps focus on the scanner input
     document.addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')) {
@@ -69,14 +95,28 @@
     });
 
     // Listen for scanner input
-    inputScanner.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const barcode = inputScanner.value.trim();
-            inputScanner.value = ''; 
-            if (barcode) { enviarCodigoAlBackend(barcode); }
+    inputScanner.addEventListener('keydown', function(e) {
+        // USB barcode pistols normally behave like keyboards and finish a
+        // scan with either Enter/CR or Tab, depending on their configuration.
+        if (e.key !== 'Enter' && e.key !== 'Tab') {
+            return;
         }
+
+        e.preventDefault();
+        const barcode = inputScanner.value.trim();
+        inputScanner.value = '';
+        if (barcode) { enviarCodigoAlBackend(barcode); }
     });
+
+    // Keeps the header count honest without a page reload.
+    function bumpProgress() {
+        const badge = document.getElementById('progress-badge');
+        if (!badge) { return; }
+        const done = Number(badge.dataset.done) + 1;
+        const total = Number(badge.dataset.total);
+        badge.dataset.done = done;
+        badge.innerHTML = `<i class="bi bi-check2-square me-1"></i>${done} of ${total} done`;
+    }
 
     // --- NEW: AUTO-DISMISSING NOTIFICATION SYSTEM ---
     function showNotification(message, isSuccess = true) {
@@ -93,7 +133,10 @@
         toast.style.zIndex = '9999'; // Ensure it stays on top of everything
         toast.style.transition = 'opacity 0.5s ease'; // Smooth fade out
         
-        toast.innerHTML = `<i class="bi ${icon} me-2"></i> ${message}`;
+        const iconElement = document.createElement('i');
+        iconElement.className = `bi ${icon} me-2`;
+        toast.appendChild(iconElement);
+        toast.appendChild(document.createTextNode(String(message)));
         
         // Add it to the screen
         document.body.appendChild(toast);
@@ -109,7 +152,7 @@
     // 1. SCAN BARCODE AND GENERATE THE 3-BUTTON UI
     async function enviarCodigoAlBackend(barcode) {
         try {
-            resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${barcode}</div>`;
+            resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${escapeHtml(barcode)}</div>`;
             
             const response = await fetch('/scan', {
                 method: 'POST',
@@ -118,60 +161,167 @@
             });
             
             const data = await response.json();
-            
+
             if (response.ok && data.status === 'success') {
-                let html = `
-                    <div class="alert alert-info shadow-sm border-0 rounded-top-3 mb-0">
-                        <strong>UPC Found!</strong> Select an action for the physical box:
-                    </div>
-                    <div class="list-group list-group-flush border rounded-bottom-3 shadow-sm">
-                `;
-                
-                data.boxes.forEach(box => {
-                    const isDone = box.DONE.toLowerCase() === 'true';
-                    const doneDisabledStr = isDone ? 'disabled' : '';
-                    const bgClass = isDone ? 'bg-light opacity-75' : '';
-                    
-                    const doneText = isDone ? '<i class="bi bi-check2-all"></i> Completed' : '<i class="bi bi-check-circle"></i> Mark Done';
-                    const doneBtnClass = isDone ? 'btn-outline-secondary' : 'btn-success';
-
-                    html += `
-                        <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${box.Row_Index}">
-                            <div class="mb-3 mb-xl-0 text-start">
-                                <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${box['Master Box #']}</span></h6>
-                                <div class="text-muted small">
-                                    <strong>Qty:</strong> ${box.Quantity} | <strong>Label:</strong> ${box['Amazon Labels']}
-                                </div>
-                            </div>
-                            
-                            <div class="btn-group shadow-sm w-100 w-xl-auto">
-                                <button class="btn btn-outline-dark btn-sm fw-bold" 
-                                        onclick="printShoeLabels('${box.FNSKU}', ${box.Quantity})">
-                                    <i class="bi bi-printer"></i> Shoes (${box.Quantity})
-                                </button>
-                                <button class="btn btn-outline-primary btn-sm fw-bold" 
-                                        onclick="printBigBoxLabel('${box['Amazon Labels']}')">
-                                    <i class="bi bi-box-seam"></i> Big Box
-                                </button>
-                                <button id="done-btn-${box.Row_Index}" class="btn ${doneBtnClass} btn-sm fw-bold" ${doneDisabledStr} 
-                                        onclick="markBoxDone('${data.UPC}', ${box.Row_Index})">
-                                    ${doneText}
-                                </button>
-                            </div>
-                        </div>
-                    `;
-                });
-                
-                html += `</div>`;
-                resultLog.innerHTML = html;
-
+                renderBoxes(data);
+            } else if (response.ok && data.status === 'choose') {
+                renderChoices(data);
             } else {
-                resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3"><strong>Error:</strong> ${data.message}</div>`;
+                renderNoMatch(data);
             }
         } catch (error) {
             resultLog.innerHTML = `<div class="alert alert-danger shadow-sm rounded-3 py-3">Connection Error</div>`;
         }
     }
+
+    // Renders the action rows: one per physical master box.
+    function renderBoxes(data) {
+        let html = `
+            <div class="alert alert-info shadow-sm border-0 rounded-top-3 mb-0">
+                <strong>Found!</strong> Select an action for the physical box:
+            </div>
+            <div class="list-group list-group-flush border rounded-bottom-3 shadow-sm">
+        `;
+
+        data.boxes.forEach(box => {
+            const isDone = String(box.DONE).toLowerCase() === 'true';
+            const doneDisabledStr = isDone ? 'disabled' : '';
+            const bgClass = isDone ? 'bg-light opacity-75' : '';
+            const rowIndex = Number(box.Row_Index);
+            const quantity = Number(box.Quantity);
+            const masterBox = escapeHtml(box['Master Box #']);
+            const amazonLabel = escapeHtml(box['Amazon Labels']);
+            const fnsku = escapeHtml(box.FNSKU);
+            // Shown because a lookup by box number or style can return rows
+            // spanning several different shoes.
+            const descr = escapeHtml(
+                [box['Style Name'], box['Size'], box['Color Code']].filter(Boolean).join(' · ')
+            );
+
+            const doneText = isDone ? '<i class="bi bi-check2-all"></i> Completed' : '<i class="bi bi-check-circle"></i> Mark Done';
+            const doneBtnClass = isDone ? 'btn-outline-secondary' : 'btn-success';
+
+            html += `
+                <div class="list-group-item d-flex flex-column flex-xl-row justify-content-between align-items-xl-center py-3 ${bgClass}" id="box-row-${rowIndex}">
+                    <div class="mb-3 mb-xl-0 text-start">
+                        <h6 class="mb-1 fw-bold text-dark">Master Box: <span class="text-primary">${masterBox}</span></h6>
+                        <div class="text-dark small">${descr}</div>
+                        <div class="text-muted small">
+                            <strong>Qty:</strong> ${quantity} | <strong>Label:</strong> ${amazonLabel}
+                        </div>
+                    </div>
+
+                    <div class="btn-group shadow-sm w-100 w-xl-auto">
+                        <button class="btn btn-outline-dark btn-sm fw-bold print-shoes-btn"
+                                data-fnsku="${fnsku}" data-quantity="${quantity}">
+                            <i class="bi bi-printer"></i> Shoes (${quantity})
+                        </button>
+                        <button class="btn btn-outline-primary btn-sm fw-bold print-big-box-btn"
+                                data-amazon-label="${amazonLabel}">
+                            <i class="bi bi-box-seam"></i> Big Box
+                        </button>
+                        <button id="done-btn-${rowIndex}" class="btn ${doneBtnClass} btn-sm fw-bold mark-done-btn" ${doneDisabledStr}
+                                data-row-index="${rowIndex}">
+                            ${doneText}
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += `</div>`;
+        resultLog.innerHTML = html;
+    }
+
+    // Several products matched. Picking one re-runs the lookup with its exact
+    // UPC, which lands on the same path a clean barcode scan takes.
+    function renderChoices(data) {
+        const hidden = data.total - data.choices.length;
+        const note = hidden > 0
+            ? ` Showing the first ${data.choices.length} of ${data.total} &mdash; type more to narrow it down.`
+            : '';
+
+        let html = `
+            <div class="alert alert-warning shadow-sm border-0 rounded-top-3 mb-0 text-start">
+                <strong>${data.total} matches</strong> for "${escapeHtml(data.query)}". Pick the one you are holding:${note}
+            </div>
+            <div class="list-group list-group-flush border rounded-bottom-3 shadow-sm">
+        `;
+
+        html += data.choices.map(choiceRow).join('');
+        html += `</div>`;
+        resultLog.innerHTML = html;
+    }
+
+    function renderNoMatch(data) {
+        let html = `
+            <div class="alert alert-danger shadow-sm ${data.suggestions && data.suggestions.length ? 'rounded-top-3 mb-0' : 'rounded-3'} py-3 text-start">
+                <strong>Error:</strong> ${escapeHtml(data.message)}
+            </div>
+        `;
+
+        if (data.suggestions && data.suggestions.length) {
+            html += `<div class="list-group list-group-flush border rounded-bottom-3 shadow-sm">`;
+            html += `<div class="list-group-item bg-light small text-muted text-start">Did you mean one of these?</div>`;
+            html += data.suggestions.map(choiceRow).join('');
+            html += `</div>`;
+        }
+
+        resultLog.innerHTML = html;
+    }
+
+    // One selectable product row, shared by the choices and suggestions lists.
+    function choiceRow(choice) {
+        const upc = escapeHtml(choice.UPC);
+        const descr = escapeHtml(
+            [choice['Style Name'], choice['Size'], choice['Color Code']].filter(Boolean).join(' · ')
+        );
+        const boxes = Number(choice.Boxes);
+        const remaining = Number(choice.Remaining);
+        const qty = Number(choice['Total Quantity']);
+        const state = remaining === 0
+            ? `<span class="badge bg-success"><i class="bi bi-check2-all"></i> all done</span>`
+            : `<span class="badge bg-secondary bg-opacity-25 text-dark">${remaining} of ${boxes} left</span>`;
+
+        return `
+            <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-3 text-start choice-btn"
+                    data-upc="${upc}">
+                <span>
+                    <span class="fw-bold text-dark d-block">${descr}</span>
+                    <span class="text-muted small">UPC ${upc} &middot; ${boxes} box(es) &middot; ${qty} pairs</span>
+                </span>
+                <span class="ms-3 text-nowrap">${state}</span>
+            </button>
+        `;
+    }
+
+    // Keep executable JavaScript out of HTML attributes. Values are read from
+    // the DOM only after the escaped template has been parsed.
+    resultLog.addEventListener('click', function(event) {
+        const shoeButton = event.target.closest('.print-shoes-btn');
+        if (shoeButton) {
+            printShoeLabels(shoeButton.dataset.fnsku, Number(shoeButton.dataset.quantity));
+            return;
+        }
+
+        const bigBoxButton = event.target.closest('.print-big-box-btn');
+        if (bigBoxButton) {
+            printBigBoxLabel(bigBoxButton.dataset.amazonLabel);
+            return;
+        }
+
+        const doneButton = event.target.closest('.mark-done-btn');
+        if (doneButton) {
+            markBoxDone(Number(doneButton.dataset.rowIndex));
+            return;
+        }
+
+        // Picking a candidate re-runs the lookup with its exact UPC.
+        const choiceButton = event.target.closest('.choice-btn');
+        if (choiceButton) {
+            enviarCodigoAlBackend(choiceButton.dataset.upc);
+        }
+    });
 
     // 2. ACTION: PRINT SHOES
     async function printShoeLabels(fnsku, quantity) {
@@ -216,12 +366,12 @@
     }
 
     // 4. ACTION: MARK DONE
-    async function markBoxDone(upc, rowIndex) {
+    async function markBoxDone(rowIndex) {
         try {
             const response = await fetch('/mark_done', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ upc: upc, row_index: rowIndex })
+                body: JSON.stringify({ row_index: rowIndex })
             });
             
             const data = await response.json();
@@ -234,7 +384,8 @@
                 doneBtn.disabled = true;
                 doneBtn.innerHTML = '<i class="bi bi-check2-all"></i> Completed';
                 doneBtn.classList.replace('btn-success', 'btn-outline-secondary');
-                
+
+                bumpProgress();
                 showNotification(data.message, true);
             } else {
                 showNotification(data.message, false);
