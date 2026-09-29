@@ -4,7 +4,6 @@ import win32service
 import win32serviceutil
 import pywintypes
 from PIL import Image, ImageWin
-import time
 import json
 import os
 import fitz  # This is PyMuPDF
@@ -39,6 +38,19 @@ def spooler_running():
         return win32serviceutil.QueryServiceStatus('Spooler')[1] == win32service.SERVICE_RUNNING
     except pywintypes.error:
         return None
+
+
+def spooler_answers():
+    """
+    False when the Print Spooler doesn't answer. A hung Spooler can still be
+    reported as "running", so this asks it for this PC's printers instead of
+    trusting the service state alone.
+    """
+    try:
+        win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL)
+    except pywintypes.error:
+        return False
+    return spooler_running() is not False
 
 
 # Text carried by the untouched entries in printers.example.json.
@@ -86,13 +98,19 @@ def resolve_printer_name(printer_type):
             )
         }
     except pywintypes.error as e:
-        # This list only exists to catch a typo in printers.json, so it must
-        # never be what stops a print. Windows can fail to build it (error 1722,
-        # "The RPC server is unavailable") while the label printer itself is
-        # fine, e.g. when another printer on the PC is an unreachable network one.
-        if spooler_running() is False:
+        # Error 1722 ("The RPC server is unavailable") has two very different
+        # causes, told apart by asking for this PC's own printers only:
+        # - that fails too: the Print Spooler itself is hung or down, and nothing
+        #   will print until it's restarted, so say so instead of trying;
+        # - that works: only a network printer is unreachable. The list is just
+        #   there to catch a typo in printers.json, so print anyway.
+        try:
+            local = {p[2] for p in win32print.EnumPrinters(win32print.PRINTER_ENUM_LOCAL)}
+        except pywintypes.error:
             raise PrintServiceError(SPOOLER_DOWN_MESSAGE)
-        print(f"⚠️ Could not list the installed printers ({e}). Trying '{printer_name}' anyway.")
+        if printer_name not in local:
+            print(f"⚠️ Could not list network printers ({e}). "
+                  f"'{printer_name}' is not a local printer; trying it anyway.")
         return printer_name
 
     if printer_name not in installed:
@@ -136,41 +154,59 @@ def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
     printer_name = resolve_printer_name(printer_type)
     print(f"🖨️ Connecting to {printer_type}: '{printer_name}'")
 
+    hDC = None
+    job_open = False
     try:
         # 3. Open the PNG label you generated
         img = Image.open(image_path)
         img = img.convert('L') # Pure black & white
-        
-        # 4. Send to printer 'quantity' times
+
+        hDC = win32ui.CreateDC()
+        hDC.CreatePrinterDC(printer_name)
+
+        printable_area = hDC.GetDeviceCaps(HORZRES), hDC.GetDeviceCaps(VERTRES)
+        target = fit_rect(img.size, printable_area)
+        dib = ImageWin.Dib(img)
+
+        # 4. One print job with one page per label. Sending a separate job for
+        # every label piled work onto the label printer's driver, which is one
+        # way the Print Spooler ends up hung.
+        hDC.StartDoc(image_path)
+        job_open = True
         for _ in range(quantity):
-            hDC = win32ui.CreateDC()
-            hDC.CreatePrinterDC(printer_name)
-            
-            printable_area = hDC.GetDeviceCaps(HORZRES), hDC.GetDeviceCaps(VERTRES)
-            target = fit_rect(img.size, printable_area)
-
-            hDC.StartDoc(image_path)
             hDC.StartPage()
-
-            dib = ImageWin.Dib(img)
             dib.draw(hDC.GetHandleOutput(), target)
-
             hDC.EndPage()
-            hDC.EndDoc()
-            hDC.DeleteDC()
-            
-            time.sleep(0.2) 
-            
+        hDC.EndDoc()
+        job_open = False
+
         print(f"✅ Successfully printed {quantity} labels to {printer_name}!")
         return True
-        
+
     except Exception as e:
+        # Cancel a half-sent job: left open, it sits stuck at the head of the
+        # queue and blocks everything printed after it.
+        if job_open:
+            try:
+                hDC.AbortDoc()
+            except Exception:
+                pass
         print(f"❌ Windows Printer Error on '{printer_name}': {e}")
-        if spooler_running() is False:
+        if not spooler_answers():
             raise PrintServiceError(SPOOLER_DOWN_MESSAGE)
         # Raised rather than returned as False so the real reason reaches the
         # screen instead of a generic "failed to print".
-        raise RuntimeError(f"Could not print on '{printer_name}': {e}")
+        raise RuntimeError(
+            f"Could not print on '{printer_name}': {e}. The print job was cancelled; "
+            "check how many labels came out before printing again."
+        )
+
+    finally:
+        if hDC is not None:
+            try:
+                hDC.DeleteDC()
+            except Exception:
+                pass
 
 # --- HELPER FUNCTION FOR WORKERS ---
 def list_available_printers():
