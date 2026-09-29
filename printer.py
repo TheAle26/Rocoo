@@ -1,5 +1,8 @@
 import win32print
 import win32ui
+import win32service
+import win32serviceutil
+import pywintypes
 from PIL import Image, ImageWin
 import time
 import json
@@ -17,6 +20,25 @@ VERTRES = 10
 
 class PrinterConfigError(RuntimeError):
     """Raised when printers.json is missing or does not name a real printer."""
+
+
+class PrintServiceError(RuntimeError):
+    """Raised when the Windows print service (Print Spooler) is not running."""
+
+
+SPOOLER_DOWN_MESSAGE = (
+    "The Windows print service (Print Spooler) is not responding. Restart it "
+    "(Windows + R, type services.msc, right-click Print Spooler > Restart) or "
+    "restart the PC, then try again."
+)
+
+
+def spooler_running():
+    """True or False as Windows reports it, or None if the state can't be read."""
+    try:
+        return win32serviceutil.QueryServiceStatus('Spooler')[1] == win32service.SERVICE_RUNNING
+    except pywintypes.error:
+        return None
 
 
 # Text carried by the untouched entries in printers.example.json.
@@ -57,11 +79,22 @@ def resolve_printer_name(printer_type):
             "Fill it in with the exact name from the Windows printer list."
         )
 
-    installed = {
-        p[2] for p in win32print.EnumPrinters(
-            win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
-        )
-    }
+    try:
+        installed = {
+            p[2] for p in win32print.EnumPrinters(
+                win32print.PRINTER_ENUM_LOCAL | win32print.PRINTER_ENUM_CONNECTIONS
+            )
+        }
+    except pywintypes.error as e:
+        # This list only exists to catch a typo in printers.json, so it must
+        # never be what stops a print. Windows can fail to build it (error 1722,
+        # "The RPC server is unavailable") while the label printer itself is
+        # fine, e.g. when another printer on the PC is an unreachable network one.
+        if spooler_running() is False:
+            raise PrintServiceError(SPOOLER_DOWN_MESSAGE)
+        print(f"⚠️ Could not list the installed printers ({e}). Trying '{printer_name}' anyway.")
+        return printer_name
+
     if printer_name not in installed:
         raise PrinterConfigError(
             f"'{printer_name}' (configured as {printer_type}) is not installed on "
@@ -133,7 +166,11 @@ def print_image_to_printer(image_path, quantity, printer_type="shoe_printer"):
         
     except Exception as e:
         print(f"❌ Windows Printer Error on '{printer_name}': {e}")
-        return False
+        if spooler_running() is False:
+            raise PrintServiceError(SPOOLER_DOWN_MESSAGE)
+        # Raised rather than returned as False so the real reason reaches the
+        # screen instead of a generic "failed to print".
+        raise RuntimeError(f"Could not print on '{printer_name}': {e}")
 
 # --- HELPER FUNCTION FOR WORKERS ---
 def list_available_printers():
