@@ -268,26 +268,64 @@
     setupDragAndDrop('boxDrop', 'box_label_pdf');
     setupDragAndDrop('shoeDrop', 'shoe_label_pdf');
 
+    const submitBtn = document.getElementById('submitBtn');
+    const submitBtnLabel = submitBtn.innerHTML;
+
+    // True when the browser can read the file. A file open in Excel is
+    // locked, and uploading it fails with Chrome's "This site can't be
+    // reached" page instead of anything that says what to do.
+    async function canRead(file) {
+        if (!file) { return true; }
+        try {
+            await file.arrayBuffer();
+            return true;
+        } catch (err) {
+            return false;
+        }
+    }
+
     // Form submit validation
-    document.getElementById('uploadForm').addEventListener('submit', function(e){
+    document.getElementById('uploadForm').addEventListener('submit', async function(e){
+        e.preventDefault();
+        const form = this;
+
         // 2nd Change: Update validation on form submit
         const ok1 = showFileName(shipmentInput, 'shipmentName', /\.(csv|xlsx)$/i);
         const ok2 = showFileName(boxInput, 'boxLabelName', /\.pdf$/);
         const ok3 = showFileName(shoeInput, 'shoeLabelName', /\.pdf$/);
-        
+
         if (!ok1 || !ok2 || !ok3) {
-            e.preventDefault();
             // 3rd Change: Alert message for errors
             alert('Please provide valid files: shipment (.csv or .xlsx) and two PDFs.');
-            return false;
+            return;
         }
-        
+
+        let readable = true;
+        for (const [input, outId] of [[shipmentInput, 'shipmentName'], [boxInput, 'boxLabelName'], [shoeInput, 'shoeLabelName']]) {
+            if (!(await canRead(input.files[0]))) {
+                readable = false;
+                document.getElementById(outId).innerHTML +=
+                    ' <div class="text-danger small mt-1 fw-bold"><i class="bi bi-x-circle"></i> ' +
+                    'Can\'t read this file. If it is open in Excel (or another program), close it, ' +
+                    'choose the file again, and retry.</div>';
+            }
+        }
+        if (!readable) { return; }
+
         // Minor UX addition: loading state on the button
-        const btn = document.getElementById('submitBtn');
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
-        btn.classList.add('disabled');
-        
-        return true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Processing...';
+        submitBtn.classList.add('disabled');
+
+        form.submit();
+    });
+
+    // Coming back with the Back button restores the page as it was left, so
+    // the button would otherwise stay stuck on "Processing...".
+    window.addEventListener('pageshow', function(e) {
+        if (e.persisted) {
+            submitBtn.innerHTML = submitBtnLabel;
+            submitBtn.classList.remove('disabled');
+        }
     });
 </script>
 {% endblock %}

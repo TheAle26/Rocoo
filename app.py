@@ -43,7 +43,7 @@ SMALL_BOX_PDF_FILENAME = 'shoe_labels_actual_shipment.pdf'
 PENDING_FOLDER = os.path.join(OUTPUT_FOLDER, '_pending')
 
 # The staged upload waiting for confirmation:
-# {'df': DataFrame, 'big': path, 'small': path, 'name': original filename}
+# {'built': build_session() result, 'big': path, 'small': path, 'name': original filename}
 pending_upload = None
 
 
@@ -79,16 +79,59 @@ def normalize_shipment(df):
     return df
 
 
-def activate_session(df):
-    """Writes the shipment to disk and builds every in-memory index from it."""
-    global df_memory
-    df_memory = normalize_shipment(df)
-    df_memory.to_csv(session_path(CSV_FILENAME), index=False)
-    process_pdfs_concurrently(
+# Without these the scan page cannot find, print or mark a box.
+REQUIRED_COLUMNS = ['UPC/EAN (GTIN)', 'Master Box #', 'FNSKU', 'Quantity', 'Amazon Labels']
+
+
+def validate_shipment(df):
+    """Refuses a sheet the scan page could not work with, naming what is wrong."""
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        found = ', '.join(str(c) for c in df.columns)
+        raise ValueError(
+            f"The spreadsheet is missing these columns: {', '.join(missing)}. "
+            f"Columns found: {found}."
+        )
+
+
+def build_session(df, small_pdf, big_pdf):
+    """
+    Parses a shipment and its PDFs without touching output/ or the live
+    session. A file that cannot load must leave the current shipment exactly
+    as it was, instead of half-replacing it and mixing the two.
+    """
+    df = normalize_shipment(df)
+    validate_shipment(df)
+    labels, boxes, index = process_pdfs_concurrently(small_pdf, big_pdf, df)
+    if not index['all_boxes']:
+        raise ValueError("The spreadsheet has no rows with a UPC/EAN (GTIN).")
+    return {'df': df, 'label_map': labels, 'bix_box_map': boxes, 'lookup_index': index}
+
+
+def commit_session(built):
+    """Makes a built session the live one, swapping every piece together."""
+    global df_memory, label_map, bix_box_map, lookup_index
+    df_memory = built['df']
+    label_map = built['label_map']
+    bix_box_map = built['bix_box_map']
+    lookup_index = built['lookup_index']
+
+
+def install_upload(built, staged_big, staged_small):
+    """Moves a staged upload that already loaded cleanly into output/."""
+    os.replace(staged_big, session_path(BIG_BOX_PDF_FILENAME))
+    os.replace(staged_small, session_path(SMALL_BOX_PDF_FILENAME))
+    built['df'].to_csv(session_path(CSV_FILENAME), index=False)
+    commit_session(built)
+
+
+def open_saved_session():
+    """Loads the session sitting in output/ into memory."""
+    commit_session(build_session(
+        pd.read_csv(session_path(CSV_FILENAME), dtype=str),
         session_path(SMALL_BOX_PDF_FILENAME),
         session_path(BIG_BOX_PDF_FILENAME),
-        df_memory,
-    )
+    ))
 
 
 def discard_pending():
@@ -113,7 +156,7 @@ def load_saved_session():
         return False
     try:
         print("🔄 Restoring the previous session from output/ ...")
-        activate_session(pd.read_csv(session_path(CSV_FILENAME), dtype=str))
+        open_saved_session()
         return True
     except Exception as e:
         print(f"❌ Could not restore the previous session: {e}")
@@ -123,8 +166,9 @@ def load_saved_session():
 def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
     """
     Runs all 3 parsers at the exact same time using 3 background threads.
+    Returns (label_map, bix_box_map, lookup_index); the caller decides when
+    they become the live session.
     """
-    global label_map, bix_box_map, lookup_index
     print("Starting parallel processing (Shoe PDF, Box PDF, and CSV Map)...")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
@@ -134,11 +178,12 @@ def process_pdfs_concurrently(small_label_path, bix_box_path, memory_df):
         future_master = executor.submit(build_lookup_index, memory_df)
 
         # 2. Wait and grab results
-        label_map = future_shoes.result()
-        bix_box_map = future_boxes.result()
-        lookup_index = future_master.result()
+        labels = future_shoes.result()
+        boxes = future_boxes.result()
+        index = future_master.result()
 
     print("✅ All data successfully processed and loaded into memory!")
+    return labels, boxes, index
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -153,7 +198,7 @@ def index():
             if not saved_session_exists():
                 return render_template('index.html', error="No previous session found.")
             try:
-                activate_session(pd.read_csv(session_path(CSV_FILENAME), dtype=str))
+                open_saved_session()
             except Exception as e:
                 return render_template('index.html', error=f"Could not open the previous session: {e}")
             return redirect(url_for('processing_page'))
@@ -165,9 +210,7 @@ def index():
             staged = pending_upload
             pending_upload = None
             try:
-                os.replace(staged['big'], session_path(BIG_BOX_PDF_FILENAME))
-                os.replace(staged['small'], session_path(SMALL_BOX_PDF_FILENAME))
-                activate_session(staged['df'])
+                install_upload(staged['built'], staged['big'], staged['small'])
             except Exception as e:
                 return render_template('index.html', error=f"Error processing files: {e}")
             return redirect(url_for('processing_page'))
@@ -202,14 +245,22 @@ def index():
             else:
                 new_df = pd.read_csv(raw_csv, dtype=str)
             os.remove(raw_csv)
+
+            # Parsed from the staged copies, so a sheet or PDF that cannot load
+            # is refused here with the current shipment still untouched.
+            built = build_session(new_df, staged_small, staged_big)
         except Exception as e:
-            discard_pending()
+            for path in (staged_big, staged_small):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
             return render_template('index.html', error=f"Error processing files: {e}")
 
         done, total = session_progress()
         if saved_session_exists() and done > 0:
             pending_upload = {
-                'df': new_df,
+                'built': built,
                 'big': staged_big,
                 'small': staged_small,
                 'name': shipment.filename,
@@ -225,9 +276,7 @@ def index():
             )
 
         try:
-            os.replace(staged_big, session_path(BIG_BOX_PDF_FILENAME))
-            os.replace(staged_small, session_path(SMALL_BOX_PDF_FILENAME))
-            activate_session(new_df)
+            install_upload(built, staged_big, staged_small)
         except Exception as e:
             return render_template('index.html', error=f"Error processing files: {e}")
 

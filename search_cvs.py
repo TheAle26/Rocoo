@@ -219,20 +219,20 @@ def build_amazon_label_to_page_dict(pdf_path, df):
     """
     label_map = {}
 
-    # FIX: Use .dropna() to completely remove empty cells (float NaNs)
-    # BEFORE we convert to strings and get the unique values.
-    labels_to_find = df['Amazon Labels'].dropna().astype(str).str.strip().unique()
-
-    # A plain substring check would let "P1 - B1" match the pages of
-    # "P1 - B10", "P1 - B171", etc. The (?!\d) forbids a digit right after
-    # the label, so only the exact box number matches.
-    label_patterns = [
-        (label, re.compile(re.escape(label) + r'(?!\d)'))
-        for label in (str(l) for l in labels_to_find)
-        if label and label != 'nan'
-    ]
-
     try:
+        # FIX: Use .dropna() to completely remove empty cells (float NaNs)
+        # BEFORE we convert to strings and get the unique values.
+        labels_to_find = df['Amazon Labels'].dropna().astype(str).str.strip().unique()
+
+        # A plain substring check would let "P1 - B1" match the pages of
+        # "P1 - B10", "P1 - B171", etc. The (?!\d) forbids a digit right after
+        # the label, so only the exact box number matches.
+        label_patterns = [
+            (label, re.compile(re.escape(label) + r'(?!\d)'))
+            for label in (str(l) for l in labels_to_find)
+            if label and label != 'nan'
+        ]
+
         with open(pdf_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
             print(f"📄 Scanning {len(reader.pages)} Big Box PDF pages...")
