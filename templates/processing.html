@@ -87,10 +87,11 @@
             .replaceAll("'", '&#039;');
     }
 
-    // Keeps focus on the scanner input
+    // Keeps focus on the scanner input. Every refocus uses preventScroll, so
+    // printing from a row further down does not jump the page back to the top.
     document.addEventListener('click', (e) => {
         if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')) {
-            inputScanner.focus();
+            inputScanner.focus({ preventScroll: true });
         }
     });
 
@@ -339,7 +340,7 @@
         } catch (error) {
             showNotification("Connection Error to Server", false);
         }
-        inputScanner.focus();
+        inputScanner.focus({ preventScroll: true });
     }
 
     // 3. ACTION: PRINT BIG BOX
@@ -360,7 +361,7 @@
         } catch (error) {
             showNotification("Connection Error to Server", false);
         }
-        inputScanner.focus();
+        inputScanner.focus({ preventScroll: true });
     }
 
     // 4. ACTION: MARK DONE / UNMARK
@@ -410,7 +411,7 @@
             const close = (answer) => {
                 document.removeEventListener('keydown', onKey, true);
                 overlay.remove();
-                inputScanner.focus();
+                inputScanner.focus({ preventScroll: true });
                 resolve(answer);
             };
             const onKey = (e) => {
@@ -460,7 +461,7 @@
         } catch (error) {
             showNotification("Connection Error", false);
         }
-        inputScanner.focus();
+        inputScanner.focus({ preventScroll: true });
     }
 
 </script>
