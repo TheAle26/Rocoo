@@ -110,19 +110,24 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         
         # 4. Draw the text
         draw = ImageDraw.Draw(new_img)
+        font_size = 24
         try:
-            # <-- Increased font size from 20 to 24
-            font = ImageFont.truetype("arial.ttf", 24) 
+            font = ImageFont.truetype("arial.ttf", font_size)
+            # Shrink long names until they fit inside the label (10px margin
+            # each side), so the size number at the end is not cut off.
+            while font.getlength(display_text) > width - 20 and font_size > 16:
+                font_size -= 1
+                font = ImageFont.truetype("arial.ttf", font_size)
         except IOError:
             print("Arial font not found, falling back to default.")
             font = ImageFont.load_default()
-        
+
         # Draw the single-line product name directly below the barcode
         pos_y_name = height + 2
         draw.text((10, pos_y_name), display_text, fill="black", font=font)
-        
+
         # Draw "New" directly below the product name
-        pos_y_new = pos_y_name + 26 # <-- Increased from 20 to account for taller letters
+        pos_y_new = pos_y_name + font_size + 2
         draw.text((10, pos_y_new), "New", fill="black", font=font)
         
         # Save the final image
