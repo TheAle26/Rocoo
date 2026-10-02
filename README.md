@@ -25,6 +25,27 @@ Python missing.
 
 ## First time on a new PC
 
+**The easy way:** get `setup.bat` from Alejo (WhatsApp, USB stick or Drive;
+the repository is private, so it can't be downloaded before setup) and
+double-click it. It:
+
+1. installs Git and Python 3.13 if they are missing (with `winget`);
+2. downloads the program into `C:\ShippingTool`. A GitHub window opens: sign
+   in with the account Alejo invited, after accepting the invitation;
+3. lists this PC's printers and asks which one prints the small pair labels
+   and which one prints the 4x6 box labels, then writes `printers.json`;
+4. puts a **Shipping Tool** shortcut on the desktop.
+
+Then open that shortcut. The first start takes a few minutes. Running
+`setup.bat` again is safe: it skips what is already done and never touches an
+existing `printers.json`. To change the printers later, run:
+
+```bash
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ShippingTool\choose_printers.ps1
+```
+
+**By hand**, if `setup.bat` can't be used:
+
 1. Install **Python**, ticking **"Add Python to PATH"** during the install.
 2. Install **Git**, so the PC can receive updates.
 3. Copy `printers.example.json` to `printers.json` and put in the exact names

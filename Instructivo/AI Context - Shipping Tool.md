@@ -46,7 +46,19 @@ Technical details:
   - the 4x6 label printer for the boxes.
 - A USB barcode scanner. It works like a keyboard: it types the code and presses Enter.
 
-**Steps:**
+**The easy way: `setup.bat`.** Alejo sends it by WhatsApp, USB stick or Drive; it can't be downloaded from GitHub before installing, because the repository is private. Double-click it and follow the prompts:
+
+1. It installs Git and Python 3.13 with `winget` if they are missing. If it says `winget` is not available, update Windows or install "App Installer" from the Microsoft Store.
+2. It downloads the program into `C:\ShippingTool`. A GitHub window opens: sign in with the invited account. If it fails with "The program could not be downloaded", it's almost always because the invitation wasn't accepted, or the person didn't sign in.
+3. It lists the printers numbered and asks which one prints the small labels and which one the 4x6 labels. It writes `printers.json` from the answers.
+4. It creates the **Shipping Tool** shortcut on the desktop. Then open that shortcut; the first start takes a few minutes.
+
+It's safe to run again: it skips what is already done and never touches an existing `printers.json`. To change the printers later:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ShippingTool\choose_printers.ps1
+```
+
+**Manual steps**, if `setup.bat` can't be used (they are what `setup.bat` does):
 
 1. **Install Python 3.13** from https://www.python.org/downloads/windows/.
    - Use **3.13**, not a newer version: some libraries pinned by the program may not be available for later versions.

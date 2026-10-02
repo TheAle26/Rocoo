@@ -46,7 +46,19 @@ Datos técnicos:
   - la de etiquetas 4x6 de las cajas.
 - Una pistola lectora de códigos USB. Funciona como un teclado: escribe el código y aprieta Enter.
 
-**Pasos:**
+**La forma fácil: `setup.bat`.** Alejo lo pasa por WhatsApp, pendrive o Drive; no se puede bajar de GitHub antes de instalar, porque el repositorio es privado. Doble clic y seguir lo que pide:
+
+1. Instala Git y Python 3.13 con `winget` si faltan. Si dice que no hay `winget`, hay que actualizar Windows o instalar "App Installer" desde la Microsoft Store.
+2. Baja el programa a `C:\ShippingTool`. Se abre una ventana de GitHub: iniciar sesión con la cuenta invitada. Si falla con "The program could not be downloaded", casi siempre es porque la invitación no fue aceptada, o no se inició sesión.
+3. Muestra las impresoras numeradas y pregunta cuál imprime las etiquetas chicas y cuál las 4x6. Con eso escribe `printers.json`.
+4. Crea el acceso directo **Shipping Tool** en el escritorio. Después hay que abrir ese acceso directo; la primera vez tarda unos minutos.
+
+Se puede correr de nuevo sin riesgo: saltea lo que ya está hecho y nunca toca un `printers.json` existente. Para cambiar las impresoras más adelante:
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File C:\ShippingTool\choose_printers.ps1
+```
+
+**Pasos a mano**, si `setup.bat` no se puede usar (es lo mismo que hace `setup.bat`):
 
 1. **Instalar Python 3.13** desde https://www.python.org/downloads/windows/.
    - Usar la **3.13**, no una versión más nueva: algunas librerías fijadas en el programa podrían no estar disponibles para versiones posteriores.
