@@ -67,24 +67,46 @@ def map_all_labels_in_pdf(pdf_path):
         return {}
     
 
+def fit_name(name, room, max_size=24, min_size=15, font_path="arial.ttf"):
+    """
+    Returns (text, font, size) so the product name fits in `room` pixels on
+    one line.
+
+    The whole name is shown whenever a font between max_size and min_size
+    fits it. Only if it still doesn't fit at min_size is it cut from the
+    middle, keeping as much of the end as possible, because that's where the
+    size usually is. (A fixed character limit used to cut first and lose
+    the size whenever it wasn't in the last 19 characters.)
+    """
+    for size in range(max_size, min_size - 1, -1):
+        font = ImageFont.truetype(font_path, size)
+        if font.getlength(name) <= room:
+            return name, font, size
+
+    font = ImageFont.truetype(font_path, min_size)
+    front = int(len(name) * 0.4)
+    back = len(name) - front
+    while front > 0 or back > 0:
+        text = name[:front] + "..." + (name[-back:] if back else "")
+        if font.getlength(text) <= room:
+            return text, font, min_size
+        # Drop characters next to the "..." - from the front first, so the
+        # end of the name survives longest.
+        if front >= back // 2 and front > 0:
+            front -= 1
+        else:
+            back -= 1
+    return "...", font, min_size
+
+
 def save_label_as_picture(fnsku, product_name, output_filename="label"):
     """
     Generates a PNG image matching the Amazon PDF layout.
-    Keeps the product name on a single line and uses middle-truncation 
-    for very long names, exactly like the provided PDF.
+    Keeps the product name on a single line; see fit_name for how a long
+    name is made to fit.
     """
     try:
-        # 1. Replicate Amazon's middle-truncation rule
-        # Reduced max_chars slightly to 42 because the font is now bigger
-        max_chars = 42 
-        if len(product_name) > max_chars:
-            keep_front = 20
-            keep_back = max_chars - keep_front - 3 
-            display_text = product_name[:keep_front] + "..." + product_name[-keep_back:]
-        else:
-            display_text = product_name
-
-        # 2. Generate the Code 128 barcode
+        # 1. Generate the Code 128 barcode
         writer_options = {
             'module_width': 0.25,  
             'module_height': 12.0,
@@ -110,17 +132,15 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         
         # 4. Draw the text
         draw = ImageDraw.Draw(new_img)
-        font_size = 24
         try:
-            font = ImageFont.truetype("arial.ttf", font_size)
-            # Shrink long names until they fit inside the label (10px margin
-            # each side), so the size number at the end is not cut off.
-            while font.getlength(display_text) > width - 20 and font_size > 16:
-                font_size -= 1
-                font = ImageFont.truetype("arial.ttf", font_size)
+            # 10px margin each side.
+            display_text, font, font_size = fit_name(product_name, width - 20)
         except IOError:
             print("Arial font not found, falling back to default.")
             font = ImageFont.load_default()
+            font_size = 24
+            display_text = (product_name if len(product_name) <= 42
+                            else product_name[:20] + "..." + product_name[-19:])
 
         # Draw the single-line product name directly below the barcode
         pos_y_name = height + 2
