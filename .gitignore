@@ -16,3 +16,10 @@ printers.json
 # Local agent definitions and tool settings. Each machine keeps its own.
 .claude/
 .codex/
+
+# Client shipment files (packing lists, label PDFs). Never committed.
+envios/
+claude_add_this_to_git_ignore*
+
+# Lock files LibreOffice leaves next to an open spreadsheet.
+.~lock.*#
