@@ -8,6 +8,7 @@ from search_cvs import (
     build_amazon_label_to_page_dict,
     resolve_query,
     MAX_CHOICES,
+    SEARCH_FIELDS,
 )
 import signal
 from printer import print_amazon_label
@@ -319,15 +320,19 @@ def public_box(box):
 def scan_barcode():
     data = request.get_json(silent=True) or {}
     query = str(data.get('barcode', '')).strip()
+    # Set by the scan page's "Search by" selector; older pages send nothing.
+    field = str(data.get('field', 'auto'))
 
     if not query:
         return jsonify({"status": "error", "message": "Empty code"}), 400
+    if field not in SEARCH_FIELDS:
+        return jsonify({"status": "error", "message": f"Unknown search field '{field}'."}), 400
 
     global lookup_index
     if lookup_index is None:
         return jsonify({"status": "error", "message": "CSV data is not in memory"}), 400
 
-    kind, payload = resolve_query(query, lookup_index)
+    kind, payload = resolve_query(query, lookup_index, field)
 
     if kind == 'boxes':
         upcs = {b['UPC'] for b in payload}
@@ -347,9 +352,14 @@ def scan_barcode():
             "total": len(payload),
         })
 
+    where = {
+        'box': " in Master Box #",
+        'upc': " in UPC/EAN (GTIN)",
+        'fnsku': " in FNSKU",
+    }.get(field, "")
     return jsonify({
         "status": "error",
-        "message": f"No match for '{query}'.",
+        "message": f"No match for '{query}'{where}.",
         "suggestions": payload[:MAX_CHOICES],
         "total": len(payload),
     }), 404
