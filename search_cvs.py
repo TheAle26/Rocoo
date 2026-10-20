@@ -44,6 +44,12 @@ def build_lookup_index(df):
     }
     print("📊 Building shipment lookup index...")
 
+    # Optional free-text "Description" column, shown under the Master Box on
+    # the scan page. Found whatever its case or surrounding spaces.
+    description_col = next(
+        (c for c in df.columns if str(c).strip().lower() == 'description'), None
+    )
+
     for row_index, row in df.iterrows():
         upc = normalize_upc(row.get('UPC/EAN (GTIN)', ''))
         if not upc or upc == 'nan':
@@ -56,6 +62,7 @@ def build_lookup_index(df):
         style = _clean(row.get('Style Name', ''))
         size = _clean(row.get('Size', ''))
         color = _clean(row.get('Color Code', ''))
+        description = _clean(row.get(description_col, '')) if description_col else ''
 
         try:
             quantity = int(float(row.get('Quantity', 0)))
@@ -70,13 +77,14 @@ def build_lookup_index(df):
             "Style Name": style,
             "Size": size,
             "Color Code": color,
+            "Description": description,
             "Quantity": quantity,
             "Amazon Labels": _clean(row.get('Amazon Labels', '')),
             "DONE": _clean(row.get('DONE', 'False')) or 'False',
             "Row_Index": row_index,
             # Precomputed so free-text search never rebuilds it per keystroke.
             "_search": ' '.join(
-                p for p in (style, size, color, master_box, fnsku) if p
+                p for p in (style, size, color, master_box, fnsku, description) if p
             ).lower(),
         }
 
