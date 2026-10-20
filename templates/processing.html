@@ -46,16 +46,21 @@
                 </div>
 
                 <div class="mx-auto" style="max-width: 600px;">
+                    <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                        <label for="search-field" class="fw-bold small text-muted mb-0">Search by</label>
+                        <select id="search-field" class="form-select form-select-sm w-auto fw-bold">
+                            <option value="box">Master Box #</option>
+                            <option value="upc">UPC/EAN (GTIN) column</option>
+                            <option value="fnsku">FNSKU</option>
+                            <option value="auto">Everything</option>
+                        </select>
+                    </div>
+
                     <input type="text" id="scanner-input" class="form-control form-control-lg text-center shadow-sm mb-2"
                            style="border: 2px solid var(--primary-color, #4f46e5); font-size: 1.5rem; letter-spacing: 2px; border-radius: 12px; background-color: #f8fafc;"
                            autofocus autocomplete="off" placeholder="Shoot barcode here...">
 
-                    <p class="text-muted small mb-4">
-                        <i class="bi bi-keyboard me-1"></i>
-                        Barcode won't scan? Type the <strong>last 5 digits</strong> of the UPC,
-                        or a box number like <code>A410</code>, an FNSKU, or a style like
-                        <code>clifton 09.5</code> &mdash; then press Enter.
-                    </p>
+                    <p id="search-hint" class="text-muted small mb-4"></p>
 
                     <div id="result-log" class="text-start">
                         <div class="text-center p-3 text-muted bg-light rounded-3 border border-dashed">
@@ -90,9 +95,37 @@
     // Keeps focus on the scanner input. Every refocus uses preventScroll, so
     // printing from a row further down does not jump the page back to the top.
     document.addEventListener('click', (e) => {
-        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')) {
+        // The "Search by" selector is left alone, or it would close as soon as it opens.
+        if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'A' && !e.target.closest('button') && !e.target.closest('a')
+                && !e.target.closest('select, label')) {
             inputScanner.focus({ preventScroll: true });
         }
+    });
+
+    // "Search by" selector: which column a scan or typed value is looked up in.
+    // Remembered per PC; Master Box # is the default.
+    const searchField = document.getElementById('search-field');
+    const searchHint = document.getElementById('search-hint');
+    const SEARCH_HINTS = {
+        box: 'Type or scan the <strong>Master Box #</strong>, e.g. <code>K1088</code> (or just <code>1088</code>), then press Enter.',
+        upc: 'Scan or type the value in the <strong>UPC/EAN (GTIN)</strong> column of the spreadsheet, then press Enter.',
+        fnsku: 'Scan the <strong>FNSKU</strong> label of a pair, e.g. <code>X004WEHQ8F</code>.',
+        auto: 'Looks everywhere: UPC (or its <strong>last 5 digits</strong>), Master Box #, FNSKU, or a style like <code>clifton 09.5</code>.'
+    };
+    try {
+        const saved = localStorage.getItem('searchField');
+        if (saved && SEARCH_HINTS[saved]) { searchField.value = saved; }
+    } catch (e) { /* storage blocked: keep the default */ }
+
+    function showSearchHint() {
+        searchHint.innerHTML = '<i class="bi bi-keyboard me-1"></i>' + SEARCH_HINTS[searchField.value];
+    }
+    showSearchHint();
+
+    searchField.addEventListener('change', () => {
+        try { localStorage.setItem('searchField', searchField.value); } catch (e) {}
+        showSearchHint();
+        inputScanner.focus({ preventScroll: true });
     });
 
     // Listen for scanner input
@@ -151,14 +184,16 @@
     // ------------------------------------------------
 
     // 1. SCAN BARCODE AND GENERATE THE 3-BUTTON UI
-    async function enviarCodigoAlBackend(barcode) {
+    // `field` overrides the selector, e.g. picking a product from a list of
+    // choices re-runs the lookup by its exact UPC.
+    async function enviarCodigoAlBackend(barcode, field = searchField.value) {
         try {
             resultLog.innerHTML = `<div class="alert alert-primary shadow-sm rounded-3 py-3"><strong>Searching...</strong> ${escapeHtml(barcode)}</div>`;
-            
+
             const response = await fetch('/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ barcode: barcode })
+                body: JSON.stringify({ barcode: barcode, field: field })
             });
             
             const data = await response.json();
@@ -318,7 +353,7 @@
         // Picking a candidate re-runs the lookup with its exact UPC.
         const choiceButton = event.target.closest('.choice-btn');
         if (choiceButton) {
-            enviarCodigoAlBackend(choiceButton.dataset.upc);
+            enviarCodigoAlBackend(choiceButton.dataset.upc, 'upc');
         }
     });
 

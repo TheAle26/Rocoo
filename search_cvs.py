@@ -154,11 +154,52 @@ def _upcs_by_text(index, text, require_all=True):
     return found
 
 
-def resolve_query(query, index):
+# What the "Search by" selector on the scan page can limit a lookup to.
+# 'auto' tries everything, in the order resolve_query documents.
+SEARCH_FIELDS = ('box', 'upc', 'fnsku', 'auto')
+
+
+def _boxes_by_number(index, digits):
+    """
+    Boxes whose Master Box # is letters followed by exactly this number, so a
+    worker can type 1088 for K1088. The number must match whole: 1 finds K1,
+    not K10 or K100.
+    """
+    pattern = re.compile(r'[A-Z]+0*' + str(int(digits)))
+    found = []
+    for key, boxes in index['by_box'].items():
+        if pattern.fullmatch(key):
+            found.extend(boxes)
+    return found
+
+
+def _resolve_in_field(raw, index, field):
+    """Looks the value up in one column only. Never guesses."""
+    key = _key(raw)
+    if field == 'box':
+        if key in index['by_box']:
+            return 'boxes', index['by_box'][key]
+        if DIGITS_PATTERN.match(raw):
+            boxes = _boxes_by_number(index, raw)
+            if boxes:
+                return 'boxes', boxes
+    elif field == 'upc':
+        upc = normalize_upc(raw)
+        if upc in index['by_upc']:
+            return 'boxes', index['by_upc'][upc]
+    elif field == 'fnsku':
+        if key in index['by_fnsku']:
+            return 'boxes', index['by_fnsku'][key]
+    return 'none', []
+
+
+def resolve_query(query, index, field='auto'):
     """
     Turns whatever the worker scanned or typed into an action.
 
-    Order matters: an exact UPC is tried first and returns the same shape it
+    `field` comes from the scan page's "Search by" selector. 'box', 'upc' and
+    'fnsku' look in that one column only. 'auto' tries everything, and there
+    order matters: an exact UPC is tried first and returns the same shape it
     always has, so the barcode gun's path through /scan is unchanged.
 
     Returns (kind, payload):
@@ -169,6 +210,9 @@ def resolve_query(query, index):
     raw = str(query or '').strip()
     if not raw:
         return 'none', []
+
+    if field != 'auto':
+        return _resolve_in_field(raw, index, field)
 
     # 1. Exact UPC. This is the barcode gun, and it stays first and unchanged.
     upc = normalize_upc(raw)
