@@ -41,8 +41,8 @@ if not exist "venv\" (
 )
 
 :: --- Pull the latest code ---
-:: A failed pull used to pass unnoticed, leaving the PC running old code
-:: forever while looking like it had updated. Now it says so, loudly.
+:: A failed pull warns loudly.
+:: Read the note after this block before editing.
 echo.
 git --version >nul 2>&1
 if errorlevel 1 (
@@ -51,9 +51,20 @@ if errorlevel 1 (
     pause
 ) else (
     echo Checking for updates...
-    git pull origin main
+    set "GIT_TERMINAL_PROMPT=0" & git -c credential.interactive=never pull origin main
     call :check_pull
 )
+
+:: The pull never asks for a GitHub login. A login window, or a
+:: "Username:" question in this window, would stop the app from starting.
+:: A PC that cannot reach the repository just fails the pull, shows the
+:: warning from :check_pull, and starts on the version it already has.
+::
+:: git pull rewrites this file while it is running, and cmd then carries
+:: on reading it from the same byte position. So everything above this
+:: note must keep exactly the same number of lines and characters, or a
+:: PC that is updating starts reading in the middle of a line. Make
+:: changes that change the length below this note.
 
 echo.
 echo Updating dependencies...
