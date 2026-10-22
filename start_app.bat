@@ -84,7 +84,10 @@ echo.
 start http://127.0.0.1:5000
 
 :: --- Run the app using Waitress instead of the Flask dev server ---
-waitress-serve --port=5000 app:app
+:: --host=127.0.0.1 keeps it to this PC. Without it waitress listens on every
+:: network card, and anyone on the warehouse network could upload, print or
+:: shut the app down, since none of those need a login.
+waitress-serve --host=127.0.0.1 --port=5000 app:app
 
 pause
 exit /b 0
