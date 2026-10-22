@@ -21,5 +21,12 @@ printers.json
 envios/
 claude_add_this_to_git_ignore*
 
+# The same kind of files dropped at the top of the folder instead of in
+# envios/. The app needs no CSV, spreadsheet or PDF there, so none is tracked.
+/*.csv
+/*.xls
+/*.xlsx
+/*.pdf
+
 # Lock files LibreOffice leaves next to an open spreadsheet.
 .~lock.*#
