@@ -364,6 +364,9 @@
         // Picking a candidate re-runs the lookup with its exact UPC.
         const choiceButton = event.target.closest('.choice-btn');
         if (choiceButton) {
+            // The clicked button is about to be replaced by the results, which
+            // would leave focus nowhere and swallow the next scan.
+            inputScanner.focus({ preventScroll: true });
             enviarCodigoAlBackend(choiceButton.dataset.upc, 'upc');
         }
     });
