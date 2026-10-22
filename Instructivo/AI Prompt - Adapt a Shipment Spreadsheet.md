@@ -217,7 +217,7 @@ Known quirks of the Birkenstock / AGL layout:
 
 1. The file name, and that they should save it in the shipment's folder next to the original, without overwriting the original.
 2. The summary above, and whether the totals matched.
-3. What they will scan or type in the program. For example: *"Type the 6-digit reference written on the box, e.g. 453909, and press Enter."*
+3. What they will scan or type in the program, and which **Search by** option to pick on the scan screen. That is usually **UPC/EAN (GTIN) column**, since that is where the scanned value was put. For example: *"In Search by, choose UPC/EAN (GTIN) column. Then type the 6-digit reference written on the box, e.g. 453909, and press Enter."*
 4. A reminder:
    - load it in the program with **Upload & Process** together with the 4x6 box labels PDF and the FNSKU labels PDF;
    - do a test print first;

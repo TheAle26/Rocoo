@@ -97,12 +97,13 @@ Technical details:
 
 **Working:**
 
-1. Scan or type the code into the large input field and press Enter.
-2. The boxes appear. On each one:
+1. Above the large input field, **Search by** chooses which spreadsheet column the code is looked up in: **Master Box #** (the default), **UPC/EAN (GTIN) column**, **FNSKU**, or **Everything** (all of them, plus the last 5 digits of a UPC or a style and size such as `clifton 09.5`). Each PC remembers its choice.
+2. Scan or type the code into the large input field and press Enter.
+3. The boxes appear. On each one:
    - **Shoes (N)** prints the labels for the pairs;
    - **Big Box** prints the box label;
    - **Mark Done** marks the box as finished.
-3. **View Data** shows the full table. **Download (CSV)** downloads the spreadsheet with the finished boxes marked.
+4. **View Data** shows the full table. **Download (CSV)** downloads the spreadsheet with the finished boxes marked.
 
 **Stop:** the red **Shut down** button at the top right. Don't close the black window with the X.
 
@@ -136,9 +137,10 @@ To tell which version is running, look at the scan screen:
 
 **Steps:**
 
-1. Type the reference (`453909`) and press Enter.
-2. The list appears: "Box 1 - ARIZONA EVA WHITE 37", "Box 2 - …", etc.
-3. Find the row with the number from the small label and print from there.
+1. In **Search by**, choose **UPC/EAN (GTIN) column**. This is needed only once per PC.
+2. Type the reference (`453909`) and press Enter.
+3. The list appears: "Box 1 - ARIZONA EVA WHITE 37", "Box 2 - …", etc.
+4. Find the row with the number from the small label and print from there.
 
 Some boxes contain more than one product; in that case several rows appear with the same box number, and each one has its own Amazon label.
 
@@ -164,7 +166,7 @@ In the spreadsheet, the `UPC/EAN (GTIN)` column deliberately contains the **mast
 | The browser says "can't reach this page" | Wait 5 seconds and press F5. If it persists, check that the black window is open and shows no errors. |
 | It prints on the wrong printer, or gives a printer error | Check that the names in `printers.json` are **exactly** the ones from `Get-Printer`. In the old version, a blank name silently prints on the Windows default printer; a misspelled name gives an error. |
 | The label comes out stretched or cut off | In Windows: Settings > Printers > (the printer) > Printing preferences, and set the right paper size: 4x6 for the boxes and the label size for the pairs. |
-| "UPC … not found" / "No match" | Check the number typed. For Birkenstock you search by the **master box reference** (6 digits). Check in View Data that the right spreadsheet is loaded. |
+| "UPC … not found" / "No match" | First check **Search by**: with the wrong option nothing is found. For Birkenstock it must be **UPC/EAN (GTIN) column**, because you search by the **master box reference** (6 digits). Then check the number typed, and in View Data that the right spreadsheet is loaded. |
 | "Page for label … not found" | That box label is not in the 4x6 PDF that was uploaded, or it is a SET ASIDE row. |
 | "FNSKU … not found in PDF" | The small-label PDF doesn't have that product. Check that it is the PDF for this shipment. |
 | "No previous session found" when clicking Continue Work | No shipment is loaded yet: upload the 3 files. |
@@ -205,7 +207,7 @@ Get-Printer | Select-Object Name
 
 | File / folder | What it is |
 |---|---|
-| `start_app.bat` | Starts everything: checks Python, creates `venv` the first time, runs `git pull`, installs `requirements.txt`, opens the browser and starts `waitress-serve --port=5000 app:app`. |
+| `start_app.bat` | Starts everything: checks Python, creates `venv` the first time, runs `git pull`, installs `requirements.txt`, opens the browser and starts `waitress-serve --host=127.0.0.1 --port=5000 app:app`, which only this PC can reach. |
 | `app.py` | Flask server. Routes: `/` (upload files or Continue Work), `/processing` (scan screen), `/scan`, `/print_shoes`, `/print_big_box`, `/mark_done`, `/view_data`, `/download_csv`, `/shutdown`. |
 | `search_cvs.py` | Builds the search indexes from the spreadsheet and finds the page for each label in the box PDF. |
 | `shoe_box.py` | Reads the FNSKU label PDF (pattern: FNSKU, product name, "New") and draws each pair's label. |

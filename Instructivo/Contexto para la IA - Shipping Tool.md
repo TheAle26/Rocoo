@@ -97,12 +97,13 @@ Datos técnicos:
 
 **Trabajar:**
 
-1. Escanear o escribir el código en el recuadro grande y apretar Enter.
-2. Aparecen las cajas. En cada una:
+1. Arriba del recuadro grande, **Search by** elige en qué columna de la planilla se busca el código: **Master Box #** (la opción por defecto), **UPC/EAN (GTIN) column**, **FNSKU** o **Everything** (todas, más los últimos 5 dígitos de un UPC o un modelo y talle como `clifton 09.5`). Cada PC recuerda lo que se eligió.
+2. Escanear o escribir el código en el recuadro grande y apretar Enter.
+3. Aparecen las cajas. En cada una:
    - **Shoes (N)** imprime las etiquetas de los pares;
    - **Big Box** imprime la etiqueta de la caja;
    - **Mark Done** marca la caja como terminada.
-3. **View Data** muestra la tabla completa. **Download (CSV)** baja la planilla con las cajas marcadas.
+4. **View Data** muestra la tabla completa. **Download (CSV)** baja la planilla con las cajas marcadas.
 
 **Apagar:** botón rojo **Shut down**, arriba a la derecha. No cerrar la ventana negra con la X.
 
@@ -136,9 +137,10 @@ Para saber qué versión se está usando, mirar la pantalla de escaneo:
 
 **Pasos:**
 
-1. Escribir la referencia (`453909`) y apretar Enter.
-2. Aparece la lista: "Box 1 - ARIZONA EVA WHITE 37", "Box 2 - …", etc.
-3. Buscar la fila con el número de la etiqueta chica e imprimir desde ahí.
+1. En **Search by**, elegir **UPC/EAN (GTIN) column**. Hace falta una sola vez por PC.
+2. Escribir la referencia (`453909`) y apretar Enter.
+3. Aparece la lista: "Box 1 - ARIZONA EVA WHITE 37", "Box 2 - …", etc.
+4. Buscar la fila con el número de la etiqueta chica e imprimir desde ahí.
 
 Algunas cajas tienen más de un producto adentro; en ese caso aparecen varias filas con el mismo número de box, y cada una tiene su propia etiqueta de Amazon.
 
@@ -164,7 +166,7 @@ En la planilla, la columna `UPC/EAN (GTIN)` contiene en realidad la **referencia
 | El navegador dice "no se puede acceder a este sitio" | Esperar 5 segundos y apretar F5. Si sigue, fijarse que la ventana negra esté abierta y sin errores. |
 | Imprime en otra impresora, o da error de impresora | Revisar que los nombres de `printers.json` sean **exactamente** los de `Get-Printer`. En la versión vieja, si un nombre queda vacío, imprime en la impresora predeterminada de Windows sin avisar; si está mal escrito, da error. |
 | La etiqueta sale estirada o cortada | En Windows: Configuración > Impresoras > (la impresora) > Preferencias de impresión, y poner el tamaño de papel correcto: 4x6 para las cajas y el tamaño de la etiqueta para los pares. |
-| "UPC … not found" / "No match" | Revisar el número escrito. Con Birkenstock se busca por la **referencia de la caja grande** (6 cifras). Comprobar que esté cargada la planilla correcta en View Data. |
+| "UPC … not found" / "No match" | Primero revisar **Search by**: con la opción equivocada no encuentra nada. Con Birkenstock tiene que estar en **UPC/EAN (GTIN) column**, porque se busca por la **referencia de la caja grande** (6 cifras). Después revisar el número escrito, y en View Data que esté cargada la planilla correcta. |
 | "Page for label … not found" | Esa etiqueta de caja no está en el PDF 4x6 que se subió, o es una fila SET ASIDE. |
 | "FNSKU … not found in PDF" | El PDF de etiquetas chicas no tiene ese producto. Revisar que sea el PDF de este envío. |
 | "No previous session found" al apretar Continue Work | No hay ningún envío cargado todavía: hay que subir los 3 archivos. |
@@ -205,7 +207,7 @@ Get-Printer | Select-Object Name
 
 | Archivo / carpeta | Qué es |
 |---|---|
-| `start_app.bat` | Arranca todo: comprueba Python, crea `venv` la primera vez, hace `git pull`, instala `requirements.txt`, abre el navegador y levanta `waitress-serve --port=5000 app:app`. |
+| `start_app.bat` | Arranca todo: comprueba Python, crea `venv` la primera vez, hace `git pull`, instala `requirements.txt`, abre el navegador y levanta `waitress-serve --host=127.0.0.1 --port=5000 app:app`, al que solo llega esta PC. |
 | `app.py` | Servidor Flask. Rutas: `/` (subir archivos o Continue Work), `/processing` (pantalla de escaneo), `/scan`, `/print_shoes`, `/print_big_box`, `/mark_done`, `/view_data`, `/download_csv`, `/shutdown`. |
 | `search_cvs.py` | Arma los índices de búsqueda desde la planilla y busca las páginas de cada etiqueta en el PDF de cajas. |
 | `shoe_box.py` | Lee el PDF de etiquetas FNSKU (patrón: FNSKU, nombre del producto, "New") y dibuja la etiqueta de cada par. |

@@ -56,12 +56,24 @@ Python missing.
 **Starting a shipment** — upload three files: the shipment spreadsheet
 (`.csv` or `.xlsx`), the big box label PDF, and the small box label PDF.
 
-**Scanning** — point the gun at the barcode and shoot. The app lists every
-master box that shoe belongs to, with a button to print the shoe labels, a
-button to print the big box label, and a button to mark the box done.
+**Choosing what to search by** — above the scan box, **Search by** picks the
+spreadsheet column a scan is looked up in. Set it once; each PC remembers it.
 
-**When a barcode will not scan** — type into the same box and press Enter.
-Any of these work:
+| Search by              | Scan or type                                                  |
+| ---------------------- | ------------------------------------------------------------- |
+| Master Box # (default) | the box number, e.g. `A410` (or just `410`)                   |
+| UPC/EAN (GTIN) column  | whatever that column holds: a shoe's UPC, or for Birkenstock the 6-digit reference written on the box |
+| FNSKU                  | a pair's FNSKU label, e.g. `X0052RHGPJ`                       |
+| Everything             | any of the above, plus the shortcuts below                    |
+
+A scan that finds nothing usually means the wrong option is picked.
+
+**Scanning** — point the gun at the barcode and shoot. The app lists every
+master box that matches, with a button to print the shoe labels, a button to
+print the big box label, and a button to mark the box done.
+
+**When a barcode will not scan** — pick **Everything**, type into the same box
+and press Enter. Any of these work:
 
 | Type this          | To find                                      |
 | ------------------ | -------------------------------------------- |
