@@ -2,7 +2,7 @@ from flask import Flask, request, render_template, jsonify, redirect, url_for, s
 import os
 import concurrent.futures
 import pandas as pd
-from shoe_box import print_label, map_all_labels_in_pdf
+from shoe_box import print_label, map_all_labels_in_pdf, LABEL_FONT_SIZES, DEFAULT_LABEL_FONT_SIZE
 from search_cvs import (
     build_lookup_index,
     build_amazon_label_to_page_dict,
@@ -374,6 +374,11 @@ def print_shoes():
 
     if not fnsku or quantity is None:
         return jsonify({"status": "error", "message": "Missing FNSKU or quantity."}), 400
+
+    # Text size picked in the scan page's "Label text" selector.
+    font_size = data.get('font_size', DEFAULT_LABEL_FONT_SIZE)
+    if not isinstance(font_size, int) or font_size not in LABEL_FONT_SIZES:
+        return jsonify({"status": "error", "message": "Invalid label text size."}), 400
         
     global label_map
     if label_map is None:
@@ -386,7 +391,7 @@ def print_shoes():
         return jsonify({"status": "error", "message": f"FNSKU {fnsku} not found in PDF."}), 404
     
     try:
-        print_label(fnsku, int(quantity), product_name)
+        print_label(fnsku, int(quantity), product_name, font_size)
         return jsonify({
             "status": "success", 
             "message": f"Sent {quantity} shoe labels to the printer!"
