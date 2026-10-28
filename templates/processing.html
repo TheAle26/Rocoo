@@ -57,9 +57,8 @@
                         <label for="label-font-size" class="fw-bold small text-muted mb-0 ms-3">Label text</label>
                         <select id="label-font-size" class="form-select form-select-sm w-auto fw-bold"
                                 title="Size of the product name on the shoe labels">
-                            {# Same sizes as LABEL_FONT_SIZES in shoe_box.py #}
-                            {% for size in range(16, 33, 2) %}
-                            <option value="{{ size }}" {% if size == 24 %}selected{% endif %}>{{ size }}{% if size == 24 %} (default){% endif %}</option>
+                            {% for size in label_font_sizes %}
+                            <option value="{{ size }}" {% if size == default_label_font_size %}selected{% endif %}>{{ size }}{% if size == default_label_font_size %} (default){% endif %}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -137,7 +136,7 @@
     });
 
     // "Label text" selector: size of the product name on the shoe labels.
-    // Remembered per PC; 24 is the default.
+    // Remembered per PC; the default comes from shoe_box.py.
     const labelFontSize = document.getElementById('label-font-size');
     try {
         const saved = localStorage.getItem('labelFontSize');

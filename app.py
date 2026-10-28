@@ -305,7 +305,9 @@ def processing_page():
         return redirect(url_for('new_shipment'))
 
     done, total = session_progress()
-    return render_template('processing.html', done=done, total=total)
+    return render_template('processing.html', done=done, total=total,
+                           label_font_sizes=LABEL_FONT_SIZES,
+                           default_label_font_size=DEFAULT_LABEL_FONT_SIZE)
 
 
 def public_box(box):

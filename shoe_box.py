@@ -8,14 +8,19 @@ from zebra_print import zebra_printer
 from printer import print_image_to_printer
 
 
+# Text sizes (in label pixels) offered by the "Label text" picker on the scan page.
+LABEL_FONT_SIZES = range(16, 33, 2)
+DEFAULT_LABEL_FONT_SIZE = 24
+# The label has room for this many lines of product name under the barcode.
+MAX_NAME_LINES = 3
 
-def print_label(FNSKU, quantity, product_name, font_size=None):
+
+def print_label(FNSKU, quantity, product_name, font_size=DEFAULT_LABEL_FONT_SIZE):
     
     output_filename = f"current_label"
     
     if product_name:
-        save_label_as_picture(FNSKU, product_name, output_filename,
-                              font_size or DEFAULT_LABEL_FONT_SIZE)
+        save_label_as_picture(FNSKU, product_name, output_filename, font_size)
         print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
         #zebra_printer(FNSKU, product_name,quantity)
         filename = f"{output_filename}.png"
@@ -67,13 +72,6 @@ def map_all_labels_in_pdf(pdf_path):
         print(f"Error: The file '{pdf_path}' was not found.")
         return {}
     
-
-# Text sizes (in label pixels) offered by the "Label text" picker on the scan page.
-LABEL_FONT_SIZES = range(16, 33, 2)
-DEFAULT_LABEL_FONT_SIZE = 24
-# The label has room for this many lines of product name under the barcode.
-MAX_NAME_LINES = 3
-
 
 def _cut_middle(text, room, font):
     """
