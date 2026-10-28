@@ -46,13 +46,20 @@
                 </div>
 
                 <div class="mx-auto" style="max-width: 600px;">
-                    <div class="d-flex align-items-center justify-content-center gap-2 mb-2">
+                    <div class="d-flex flex-wrap align-items-center justify-content-center gap-2 mb-2">
                         <label for="search-field" class="fw-bold small text-muted mb-0">Search by</label>
                         <select id="search-field" class="form-select form-select-sm w-auto fw-bold">
                             <option value="box">Master Box #</option>
                             <option value="upc">UPC/EAN (GTIN) column</option>
                             <option value="fnsku">FNSKU</option>
                             <option value="auto">Everything</option>
+                        </select>
+                        <label for="label-font-size" class="fw-bold small text-muted mb-0 ms-3">Label text</label>
+                        <select id="label-font-size" class="form-select form-select-sm w-auto fw-bold"
+                                title="Size of the product name on the shoe labels">
+                            {% for size in label_font_sizes %}
+                            <option value="{{ size }}" {% if size == default_label_font_size %}selected{% endif %}>{{ size }}{% if size == default_label_font_size %} (default){% endif %}</option>
+                            {% endfor %}
                         </select>
                     </div>
 
@@ -125,6 +132,21 @@
     searchField.addEventListener('change', () => {
         try { localStorage.setItem('searchField', searchField.value); } catch (e) {}
         showSearchHint();
+        inputScanner.focus({ preventScroll: true });
+    });
+
+    // "Label text" selector: size of the product name on the shoe labels.
+    // Remembered per PC; the default comes from shoe_box.py.
+    const labelFontSize = document.getElementById('label-font-size');
+    try {
+        const saved = localStorage.getItem('labelFontSize');
+        if (saved && labelFontSize.querySelector(`option[value="${CSS.escape(saved)}"]`)) {
+            labelFontSize.value = saved;
+        }
+    } catch (e) { /* storage blocked: keep the default */ }
+
+    labelFontSize.addEventListener('change', () => {
+        try { localStorage.setItem('labelFontSize', labelFontSize.value); } catch (e) {}
         inputScanner.focus({ preventScroll: true });
     });
 
@@ -374,7 +396,7 @@
             const response = await fetch('/print_shoes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fnsku: fnsku, quantity: quantity })
+                body: JSON.stringify({ fnsku: fnsku, quantity: quantity, font_size: Number(labelFontSize.value) })
             });
             const data = await response.json();
             

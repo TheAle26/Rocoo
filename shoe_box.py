@@ -8,13 +8,19 @@ from zebra_print import zebra_printer
 from printer import print_image_to_printer
 
 
+# Text sizes (in label pixels) offered by the "Label text" picker on the scan page.
+LABEL_FONT_SIZES = range(16, 33, 2)
+DEFAULT_LABEL_FONT_SIZE = 24
+# The label has room for this many lines of product name under the barcode.
+MAX_NAME_LINES = 3
 
-def print_label(FNSKU, quantity, product_name):
+
+def print_label(FNSKU, quantity, product_name, font_size=DEFAULT_LABEL_FONT_SIZE):
     
     output_filename = f"current_label"
     
     if product_name:
-        save_label_as_picture(FNSKU, product_name, output_filename)
+        save_label_as_picture(FNSKU, product_name, output_filename, font_size)
         print(f"Shoe box label generated for FNSKU: {FNSKU}, Product: {product_name}, Quantity: {quantity}")
         #zebra_printer(FNSKU, product_name,quantity)
         filename = f"{output_filename}.png"
@@ -67,43 +73,70 @@ def map_all_labels_in_pdf(pdf_path):
         return {}
     
 
-def fit_name(name, room, max_size=24, min_size=15, font_path="arial.ttf"):
+def _cut_middle(text, room, font):
     """
-    Returns (text, font, size) so the product name fits in `room` pixels on
-    one line.
-
-    The whole name is shown whenever a font between max_size and min_size
-    fits it. Only if it still doesn't fit at min_size is it cut from the
-    middle, keeping as much of the end as possible, because that's where the
-    size usually is. (A fixed character limit used to cut first and lose
-    the size whenever it wasn't in the last 19 characters.)
+    Cuts text from the middle with "..." until it fits in `room` pixels,
+    keeping as much of the end as possible, because that's where the size
+    usually is.
     """
-    for size in range(max_size, min_size - 1, -1):
-        font = ImageFont.truetype(font_path, size)
-        if font.getlength(name) <= room:
-            return name, font, size
-
-    font = ImageFont.truetype(font_path, min_size)
-    front = int(len(name) * 0.4)
-    back = len(name) - front
+    front = int(len(text) * 0.4)
+    back = len(text) - front
     while front > 0 or back > 0:
-        text = name[:front] + "..." + (name[-back:] if back else "")
-        if font.getlength(text) <= room:
-            return text, font, min_size
+        cut = text[:front] + "..." + (text[-back:] if back else "")
+        if font.getlength(cut) <= room:
+            return cut
         # Drop characters next to the "..." - from the front first, so the
         # end of the name survives longest.
         if front >= back // 2 and front > 0:
             front -= 1
         else:
             back -= 1
-    return "...", font, min_size
+    return "..."
 
 
-def save_label_as_picture(fnsku, product_name, output_filename="label"):
+def wrap_name(name, room, font):
+    """
+    Splits the product name into lines of at most `room` pixels, breaking
+    between words (a single word wider than a line is broken by characters).
+
+    Uses up to MAX_NAME_LINES lines. If the name needs more, the last line
+    holds the rest of it cut from the middle, so the size at the end still
+    shows.
+    """
+    lines = []
+    line = ""
+    words = name.split()
+    while words:
+        word = words[0]
+        candidate = f"{line} {word}" if line else word
+        if font.getlength(candidate) <= room:
+            line = candidate
+            words.pop(0)
+        elif line:
+            lines.append(line)
+            line = ""
+        else:
+            # One word wider than the whole line: take what fits of it.
+            fit = 1
+            while fit < len(word) and font.getlength(word[:fit + 1]) <= room:
+                fit += 1
+            lines.append(word[:fit])
+            words[0] = word[fit:]
+    if line:
+        lines.append(line)
+
+    if len(lines) > MAX_NAME_LINES:
+        rest = " ".join(lines[MAX_NAME_LINES - 1:])
+        lines = lines[:MAX_NAME_LINES - 1] + [_cut_middle(rest, room, font)]
+    return lines or [""]
+
+
+def save_label_as_picture(fnsku, product_name, output_filename="label",
+                          font_size=DEFAULT_LABEL_FONT_SIZE):
     """
     Generates a PNG image matching the Amazon PDF layout.
-    Keeps the product name on a single line; see fit_name for how a long
-    name is made to fit.
+    The product name is written at `font_size` on up to MAX_NAME_LINES
+    lines; see wrap_name for how a long name is made to fit.
     """
     try:
         # 1. Generate the Code 128 barcode
@@ -124,31 +157,28 @@ def save_label_as_picture(fnsku, product_name, output_filename="label"):
         # 3. Open the image to add the product name
         img = Image.open(filename)
         width, height = img.size
-        
-        # Create a new, taller image to fit the larger text
-        extra_height = 60 # <-- Increased from 45 to give the bigger text more room
-        new_img = Image.new('RGB', (width, height + extra_height), 'white')
-        new_img.paste(img, (0, 0))
-        
-        # 4. Draw the text
-        draw = ImageDraw.Draw(new_img)
+
         try:
-            # 10px margin each side.
-            display_text, font, font_size = fit_name(product_name, width - 20)
+            font = ImageFont.truetype("arial.ttf", font_size)
         except IOError:
             print("Arial font not found, falling back to default.")
             font = ImageFont.load_default()
-            font_size = 24
-            display_text = (product_name if len(product_name) <= 42
-                            else product_name[:20] + "..." + product_name[-19:])
+        # 10px margin each side.
+        lines = wrap_name(product_name, width - 20, font)
+        line_height = font_size + 4
 
-        # Draw the single-line product name directly below the barcode
-        pos_y_name = height + 2
-        draw.text((10, pos_y_name), display_text, fill="black", font=font)
-
-        # Draw "New" directly below the product name
-        pos_y_new = pos_y_name + font_size + 2
-        draw.text((10, pos_y_new), "New", fill="black", font=font)
+        # Create a new, taller image with room for the name lines and "New"
+        extra_height = (len(lines) + 1) * line_height + 6
+        new_img = Image.new('RGB', (width, height + extra_height), 'white')
+        new_img.paste(img, (0, 0))
+        
+        # 4. Draw the product name directly below the barcode, then "New"
+        # below its last line
+        draw = ImageDraw.Draw(new_img)
+        pos_y = height + 2
+        for text in lines + ["New"]:
+            draw.text((10, pos_y), text, fill="black", font=font)
+            pos_y += line_height
         
         # Save the final image
         new_img.save(filename)
